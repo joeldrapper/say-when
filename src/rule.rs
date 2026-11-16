@@ -445,24 +445,29 @@ impl Rule {
     /// The day an offset moved to the one a schedule starts on, which its
     /// periods are counted from, so "the Monday after every Sunday" that
     /// starts on a Monday counts from the Sunday before, and every other
-    /// one keeps to that Sunday's weeks. Looked for as far either way as
-    /// the offset goes, nearest first. `None` when no day of its moves to
-    /// it.
+    /// one keeps to that Sunday's weeks. It's the nearest day, as far
+    /// either way as the offset goes, that the offset moves to the start
+    /// and that the rule is on, counted from itself. `None` when there's
+    /// none.
     fn anchor(
         &self,
         start: Day,
         offset: Offset,
-        periods: i64,
+        days: i64,
         calendar: &Working,
         named: Option<&Called>,
     ) -> Option<Day> {
         let each = Rule { interval: 1, count: None, until: None, ..self.clone() };
-        for away in 0..=periods.min(2000) {
-            for period in [-away, away] {
-                for day in each.base_days(start, period, calendar, named).unwrap_or_default() {
-                    if offset.from(day, None, calendar).is_some_and(|(to, _)| to == start) {
-                        return Some(day);
-                    }
+        for away in 0..=days.min(3000) {
+            let sides = if away == 0 { &[0][..] } else { &[-away, away][..] };
+            for day in sides.iter().filter_map(|away| start.add_days(*away)) {
+                let moves = offset.from(day, None, calendar).is_some_and(|(to, _)| to == start);
+                if moves
+                    && each
+                        .base_days(day, 0, calendar, named)
+                        .is_some_and(|days| days.contains(&day))
+                {
+                    return Some(day);
                 }
             }
         }
@@ -589,8 +594,7 @@ impl Rule {
         let anchor = self
             .offset
             .and_then(|offset| {
-                let periods = back.saturating_mul(i64::from(self.interval_or_one()));
-                self.anchor(start, offset, periods, calendar, named.flatten())
+                self.anchor(start, offset, offset.most_days(calendar), calendar, named.flatten())
             })
             .unwrap_or(start);
         let before = if from > anchor { (self.periods_to(anchor, from) - back).max(0) } else { 0 };

@@ -166,6 +166,12 @@ reads as, change the library, run
 `BLESS=1 cargo test --features serde --test cases`, and read the diff of
 the cases before committing it: that diff is the change in behaviour.
 
+`tests/properties.rs` holds what's true whatever the rule, calendar or
+phrase is, with thousands of each made at random by proptest: a rule reads
+back as it's written, a series comes round on the day it starts, its days
+are in order and the same however a window is split, it's on each of them
+and no others, and so many working days on is a working day so many away.
+
 ## Licence
 
 MIT. See `LICENSE`.
