@@ -1,0 +1,53 @@
+# The tools say-when is built and tested with, at the versions CI uses:
+# `mise install` sets them up, and `mise run` lists the tasks.
+[tools]
+# The crate builds with Rust 1.90 or later (see Cargo.toml); this is what
+# it's developed with, and what builds the npm package's WebAssembly.
+rust = { version = "1.100.0", profile = "minimal", components = "rustfmt,clippy", targets = "wasm32-unknown-unknown" }
+# For the npm package, in js/.
+node = "26.13.0"
+aube = "2.8.5"
+
+[tasks.setup]
+description = "Install the tools and the npm package's dependencies"
+run = ["mise install", "cd js && aube install"]
+
+[tasks.test]
+description = "Test the crate, and the npm package against the crate's cases"
+depends = ["test:rust", "test:js"]
+
+[tasks."test:rust"]
+description = "Test the crate, with none of its features and with all of them"
+run = [
+  "cargo test --locked",
+  "cargo test --locked --all-features",
+  "cargo test --locked -p say-when-wasm",
+]
+
+[tasks."test:js"]
+description = "Build the WebAssembly module and test the npm package against the crate's cases"
+dir = "js"
+run = "aube run test"
+
+[tasks.lint]
+description = "Check formatting, Clippy, the docs, the package's types and oxlint"
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+  "cargo clippy -p say-when-wasm --target wasm32-unknown-unknown --locked -- -D warnings",
+  "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --all-features --locked",
+  "cd js && aube run check && aube run lint",
+]
+
+[tasks.format]
+description = "Format the Rust and the TypeScript"
+run = ["cargo fmt --all", "cd js && aube run format"]
+
+[tasks.build]
+description = "Build the npm package, into js/dist"
+dir = "js"
+run = "aube run build"
+
+[tasks.read]
+description = "Read a phrase, as in `mise run read -- \"next friday\"`"
+run = "cargo run --quiet --example read --"

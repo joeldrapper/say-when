@@ -1,0 +1,57 @@
+{
+	"name": "say-when",
+	"version": "0.1.0",
+	"description": "Reads days, ranges of days, times and how things repeat, written in plain English",
+	"keywords": [
+		"date",
+		"date-picker",
+		"natural-language",
+		"parser",
+		"recurrence",
+		"rrule",
+		"webassembly"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/joeldrapper/say-when.git",
+		"directory": "js"
+	},
+	"files": [
+		"dist",
+		"!dist/inline.d.ts",
+		"!dist/module.d.ts.map"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./slim": {
+			"types": "./dist/slim.d.ts",
+			"default": "./dist/slim.js"
+		},
+		"./say-when.wasm": "./dist/say-when.wasm",
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"build": "node scripts/build.ts",
+		"wasm": "node scripts/build.ts --wasm",
+		"test": "node scripts/build.ts --wasm && node --test 'test/*.test.ts'",
+		"check": "tsc --noEmit",
+		"lint": "oxfmt --check && oxlint --deny-warnings",
+		"format": "oxfmt",
+		"prepack": "node scripts/build.ts"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.6",
+		"oxfmt": "^0.78.0",
+		"oxlint": "^1.93.0",
+		"typescript": "^7.0.2"
+	},
+	"engines": {
+		"node": ">=20.16"
+	}
+}

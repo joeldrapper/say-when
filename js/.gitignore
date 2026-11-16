@@ -1,0 +1,5 @@
+/node_modules/
+/dist/
+/src/inline.ts
+/src/say-when.wasm
+/LICENSE

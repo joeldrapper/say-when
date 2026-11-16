@@ -172,6 +172,24 @@ back as it's written, a series comes round on the day it starts, its days
 are in order and the same however a window is split, it's on each of them
 and no others, and so many working days on is a working day so many away.
 
+## From JavaScript and TypeScript
+
+The npm package [`say-when`](https://www.npmjs.com/package/say-when) ([source](https://github.com/joeldrapper/say-when/tree/main/js)) is this library compiled to
+WebAssembly, with a typed API in TypeScript, and it reads the same: the
+cases are run through it too.
+
+```ts
+import { Reader } from 'say-when';
+
+new Reader({ locale: 'uk' }).days('next friday', '2026-11-16')[0].day; // '2026-11-27'
+```
+
+## Working on it
+
+`mise install` sets up the Rust, Node and aube it's built with, and `mise
+run` lists the tasks: `mise run test` tests the crate and the npm
+package, and `mise run lint` checks both.
+
 ## Licence
 
 MIT. See `LICENSE`.

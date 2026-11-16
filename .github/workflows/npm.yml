@@ -1,0 +1,42 @@
+# Publishes the npm package, in js/, when a tag like js-v0.1.0 is pushed
+# for the version in its package.json. The WebAssembly module is built
+# here, from the tagged commit, and never committed.
+#
+# It publishes with npm's trusted publishing, so no token is kept
+# anywhere: on npmjs.com, the package's settings name this repository and
+# this workflow as its trusted publisher. While the repository is public,
+# npm adds provenance, saying the package was built from this commit by
+# this workflow.
+name: Publish to npm
+
+on:
+  push:
+    tags: ['js-v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    environment: npm
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - name: Check the tag is the package's version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "js-v$version" ]; then
+            echo "The tag $GITHUB_REF_NAME isn't js-v$version, the version in js/package.json" >&2
+            exit 1
+          fi
+      - run: aube ci
+      - run: aube run check
+      - run: aube run test
+      # Node 26's npm is new enough for trusted publishing (11.5.1 or later).
+      - run: npm publish --access public

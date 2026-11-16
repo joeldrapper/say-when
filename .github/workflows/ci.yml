@@ -23,7 +23,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features --locked
+      - run: cargo clippy --workspace --all-targets --all-features --locked
       - run: cargo doc --no-deps --all-features --locked
 
   test:
@@ -53,6 +53,24 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - run: cargo build --all-features --target wasm32-unknown-unknown --locked
+      - run: cargo clippy -p say-when-wasm --target wasm32-unknown-unknown --locked
+
+  # The npm package, in js/: its WebAssembly module built from this commit,
+  # the library's cases run through it, and what would be published.
+  js:
+    name: npm package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: aube ci
+      - run: aube run check
+      - run: aube run lint
+      - run: aube run test
+      - run: npm pack --dry-run
 
   package:
     name: Package
