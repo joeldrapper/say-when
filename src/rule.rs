@@ -122,10 +122,9 @@ impl Rule {
         let mut rule = Rule::every(Frequency::Daily);
         let mut frequency = None;
         for part in text.split(';').filter(|part| !part.is_empty()) {
-            let mut sides = part.split('=');
-            let (name, value) =
-                (sides.next()?.to_ascii_uppercase(), sides.next()?.to_ascii_uppercase());
-            if name.is_empty() {
+            let (name, value) = part.split_once('=')?;
+            let (name, value) = (name.to_ascii_uppercase(), value.to_ascii_uppercase());
+            if name.is_empty() || value.contains('=') {
                 return None;
             }
             let whole = |text: &str| {
@@ -327,13 +326,11 @@ impl Rule {
         let mut counted = 0;
         // With no count to keep, it starts a period before the one the
         // first day asked for is in, rather than going through every one
-        // since it began.
-        let skip = if self.count.is_none() && from > start {
-            (self.periods_to(start, from) - 1).max(0)
-        } else {
-            0
-        };
-        for period in skip..skip + MOST_PERIODS {
+        // since it began. With one, every period before has to be counted,
+        // so it goes through them, and as many again after.
+        let before = if from > start { (self.periods_to(start, from) - 1).max(0) } else { 0 };
+        let skip = if self.count.is_none() { before } else { 0 };
+        for period in skip..before + MOST_PERIODS {
             let Some(found) = self.period_days(start, period, calendar) else { break };
             for day in found {
                 if day < start {
@@ -492,8 +489,8 @@ impl serde::Serialize for Rule {
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Rule {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Rule, D::Error> {
-        let text = <&str>::deserialize(deserializer)?;
-        Rule::parse(text)
+        let text = String::deserialize(deserializer)?;
+        Rule::parse(&text)
             .ok_or_else(|| serde::de::Error::custom("not a rule this can work out the days of"))
     }
 }
@@ -634,9 +631,22 @@ mod tests {
             "FREQ=DAILY;WKST=SU",
             "FREQ=DAILY;BYHOUR=3",
             "FREQ=MONTHLY;BYDAY=6MO",
+            "FREQ=DAILY=WEEKLY",
+            "FREQ=DAILY;COUNT=3=4",
         ] {
             assert_eq!(Rule::parse(rule), None, "{rule}");
         }
+    }
+
+    #[test]
+    fn counts_every_day_before_one_far_on() {
+        let rule = Rule::parse("FREQ=DAILY;COUNT=50000").unwrap();
+        let (start, from) = (day("2000-01-01"), day("2060-01-01"));
+        let found = rule.days(start, from, Day::MAX, 2, &Working::weekdays());
+        assert_eq!(found, [day("2060-01-01"), day("2060-01-02")]);
+        // Its 50,000th day is 22 November 2136, and there's none after.
+        let last = day("2136-11-22");
+        assert_eq!(rule.days(start, last, Day::MAX, 2, &Working::weekdays()), [last]);
     }
 
     #[test]

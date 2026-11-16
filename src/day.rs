@@ -264,8 +264,8 @@ impl serde::Serialize for Day {
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Day {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Day, D::Error> {
-        let text = <&str>::deserialize(deserializer)?;
-        Day::parse(text).ok_or_else(|| serde::de::Error::custom("not a day written YYYY-MM-DD"))
+        let text = String::deserialize(deserializer)?;
+        Day::parse(&text).ok_or_else(|| serde::de::Error::custom("not a day written YYYY-MM-DD"))
     }
 }
 
@@ -329,14 +329,23 @@ impl serde::Serialize for Time {
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Time {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Time, D::Error> {
-        let text = <&str>::deserialize(deserializer)?;
-        Time::parse(text).ok_or_else(|| serde::de::Error::custom("not a time written HH:MM"))
+        let text = String::deserialize(deserializer)?;
+        Time::parse(&text).ok_or_else(|| serde::de::Error::custom("not a time written HH:MM"))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn reads_from_anything_serde_reads() {
+        let day: Day = serde_json::from_reader(&b"\"2026-11-16\""[..]).unwrap();
+        assert_eq!(day, Day::new(2026, 11, 16).unwrap());
+        let time: Time = serde_json::from_value(serde_json::json!("09:30")).unwrap();
+        assert_eq!(time.to_string(), "09:30");
+    }
 
     fn day(text: &str) -> Day {
         Day::parse(text).unwrap()
