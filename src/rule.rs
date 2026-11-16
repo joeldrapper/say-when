@@ -47,6 +47,8 @@ pub struct RepeatDays<'a> {
     found: std::vec::IntoIter<Day>,
     counted: u32,
     done: bool,
+    /// The last day it came round, as an offset can move two to one.
+    came: Option<Day>,
 }
 
 impl RepeatDays<'_> {
@@ -75,7 +77,7 @@ impl Iterator for RepeatDays<'_> {
                 self.period += 1;
                 continue;
             };
-            if day < self.start {
+            if day < self.start || self.came.is_some_and(|came| day <= came) {
                 continue;
             }
             if day > self.to || rule.until.is_some_and(|until| day > until) {
@@ -85,6 +87,7 @@ impl Iterator for RepeatDays<'_> {
             }
             // Those skipped count, as for iCalendar's EXDATE.
             self.counted += 1;
+            self.came = Some(day);
             if rule.count.is_some_and(|count| self.counted >= count) {
                 self.done = true;
                 self.found = Vec::new().into_iter();
@@ -179,8 +182,9 @@ pub struct Rule {
     /// year, and not in a year the calendar doesn't have it.
     pub on: Option<String>,
     /// Where each day it comes round is moved to, like the weekend before
-    /// each Mother's Day. Never a length of time within a day, nor at a
-    /// time.
+    /// each Mother's Day. A day moved before the first it's on doesn't
+    /// count, and two moved to one are one. A length of time within a day
+    /// moves a day nowhere, so a rule isn't read with one.
     pub offset: Option<Offset>,
 }
 
@@ -271,8 +275,15 @@ impl Rule {
                 // The name it was first written with, still read.
                 "X-BANK-HOLIDAYS" if value == "SKIP" => rule.skips_days_off = true,
                 "X-SKIP-DAYS-OFF" if value == "TRUE" => rule.skips_days_off = true,
-                "X-ON" if !said.trim().is_empty() => rule.on = Some(said.trim().to_string()),
+                "X-ON" if !said.is_empty() => {
+                    let on = said.replace("%3B", ";").replace("%3b", ";");
+                    let on = on.replace("%3D", "=").replace("%3d", "=");
+                    rule.on = Some(on.replace("%25", "%"));
+                }
                 "X-OFFSET" => {
+                    if rule.offset.is_some() {
+                        return None;
+                    }
                     let offset: Offset = value.parse().ok()?;
                     if offset.is_time() || offset.at.is_some() {
                         return None;
@@ -390,7 +401,12 @@ impl Rule {
                         .checked_add(period.checked_mul(i64::from(self.interval))?)?,
                 )
                 .ok()?;
-                Some(named.span(year).map(|(_, last)| last))
+                // None after the last year the calendar has it in.
+                if named.last_year().is_some_and(|last| year > last) {
+                    return None;
+                }
+                let last = named.span(year).map(|(_, last)| last);
+                Some(last.filter(|day| self.counts(*day, calendar)))
             }
             _ => None,
         };
@@ -508,8 +524,17 @@ impl Rule {
         // With no count to keep, it starts a period before the one the
         // first day asked for is in, rather than going through every one
         // since it began. With one, every period before has to be counted.
-        // An offset can move a day out of its period, as far as a year.
-        let back = if self.offset.is_some() { 2 } else { 1 };
+        // An offset can move a day out of its period, into another as far
+        // off as it goes.
+        let back = self.offset.map_or(1, |offset| {
+            let period = i64::from(self.interval).saturating_mul(match self.frequency {
+                Frequency::Daily => 1,
+                Frequency::Weekly => 7,
+                Frequency::Monthly => 28,
+                Frequency::Yearly => 365,
+            });
+            (offset.most_days() + period - 1) / period + 1
+        });
         let before = if from > start { (self.periods_to(start, from) - back).max(0) } else { 0 };
         // The named day it's on, if it's on one, which isn't on any day if
         // the calendar hasn't got it.
@@ -527,6 +552,7 @@ impl Rule {
             found: Vec::new().into_iter(),
             counted: 0,
             done: matches!(named, Some(None)),
+            came: None,
         }
     }
 
@@ -537,6 +563,64 @@ impl Rule {
         let each = Rule { interval: 1, count: None, until: None, ..self.clone() };
         let to = from.add_months(12 * 30).unwrap_or(Day::MAX);
         each.days(from, from, to, 1, calendar).first().copied()
+    }
+
+    /// The rule as it is when one of its days moves to another and the
+    /// rest move with it: on Tuesdays, moved from a Tuesday to a
+    /// Wednesday, it's on Wednesdays, and on the 2nd Tuesday of the month,
+    /// moved to the 3rd Thursday, it's on that. One on a named day, or that
+    /// picks its day by where it is in the month, like the last working
+    /// day, is as it was. The day it starts on is the caller's to move.
+    pub fn moved(&self, from: Day, to: Day) -> Rule {
+        let mut rule = self.clone();
+        if self.on.is_some() || self.by_set_pos.is_some() {
+            return rule;
+        }
+        let along = to.weekday().from_monday() - from.weekday().from_monday();
+        let weekday =
+            |weekday: Weekday| Weekday::ALL[(weekday.from_monday() + along).rem_euclid(7) as usize];
+        match self.frequency {
+            Frequency::Daily => {}
+            Frequency::Weekly => {
+                for each in &mut rule.by_day {
+                    each.weekday = weekday(each.weekday);
+                }
+                rule.by_day.sort_by_key(|each| each.weekday.from_monday());
+            }
+            Frequency::Monthly | Frequency::Yearly => {
+                if let [only] = self.by_month_day[..] {
+                    let from_end = to.month_end().day() as i32 - to.day() as i32;
+                    rule.by_month_day =
+                        vec![if only < 0 { -1 - from_end } else { to.day() as i32 }];
+                } else if !self.by_month_day.is_empty() {
+                    let by = to.day() as i32 - from.day() as i32;
+                    rule.by_month_day =
+                        self.by_month_day
+                            .iter()
+                            .map(|n| {
+                                if *n > 0 { (n + by).clamp(1, 31) } else { (n + by).clamp(-31, -1) }
+                            })
+                            .collect();
+                }
+                if let [only] = self.by_day[..] {
+                    let from_end = to.month_end().day() - to.day();
+                    let nth = match only.nth {
+                        0 => 0,
+                        nth if nth < 0 => -1 - (from_end / 7) as i32,
+                        _ => (to.day() as i32 - 1) / 7 + 1,
+                    };
+                    rule.by_day = vec![ByDay { weekday: to.weekday(), nth }];
+                } else {
+                    for each in &mut rule.by_day {
+                        each.weekday = weekday(each.weekday);
+                    }
+                }
+                if self.frequency == Frequency::Yearly && self.by_month.is_some() {
+                    rule.by_month = Some(to.month());
+                }
+            }
+        }
+        rule
     }
 
     /// The day something that repeats so long after it's done comes round
@@ -776,6 +860,9 @@ impl fmt::Display for Rule {
             write!(f, ";X-SKIP-DAYS-OFF=TRUE")?;
         }
         if let Some(on) = &self.on {
+            // What would end the part, or its name, is written as a URL
+            // has it.
+            let on = on.replace('%', "%25").replace(';', "%3B").replace('=', "%3D");
             write!(f, ";X-ON={on}")?;
         }
         if let Some(offset) = self.offset {
@@ -920,6 +1007,96 @@ mod tests {
                 .len(),
             3
         );
+    }
+
+    #[test]
+    fn writes_a_named_day_any_name_reads_back() {
+        let rule = Rule { on: Some("50%; a=b".to_string()), ..Rule::every(Frequency::Yearly) };
+        let text = rule.to_string();
+        assert_eq!(text, "FREQ=YEARLY;X-ON=50%25%3B a%3Db");
+        assert_eq!(Rule::parse(&text), Some(rule));
+        assert_eq!(Rule::parse("FREQ=YEARLY;X-OFFSET=-P1D;X-OFFSET=-P2D"), None);
+    }
+
+    #[test]
+    fn moves_far_and_never_twice_to_a_day() {
+        let calendar = Working::weekdays();
+        let each = |rule: &str, start: &str, from: &str, to: &str| -> Vec<String> {
+            Rule::parse(rule)
+                .unwrap()
+                .days(day(start), day(from), day(to), 99, &calendar)
+                .iter()
+                .map(Day::to_string)
+                .collect()
+        };
+        // A year back from a Tuesday each week.
+        assert_eq!(
+            each("FREQ=WEEKLY;BYDAY=TU;X-OFFSET=-P1Y", "2026-01-06", "2026-11-01", "2026-11-14"),
+            ["2026-11-02", "2026-11-09"]
+        );
+        assert_eq!(
+            each(
+                "FREQ=MONTHLY;BYMONTHDAY=15;X-OFFSET=-P6M",
+                "2026-01-15",
+                "2026-11-01",
+                "2026-12-30"
+            )
+            .len(),
+            2
+        );
+        // The weekend after each day: once each weekend.
+        assert_eq!(
+            each("FREQ=DAILY;X-OFFSET=+WEEKEND", "2026-11-02", "2026-11-01", "2026-11-22"),
+            ["2026-11-07", "2026-11-14", "2026-11-21"]
+        );
+    }
+
+    #[test]
+    fn moves_with_one_of_its_days() {
+        let moved = |rule: &str, from: &str, to: &str| {
+            Rule::parse(rule).unwrap().moved(day(from), day(to)).to_string()
+        };
+        // From a Tuesday to a Wednesday.
+        assert_eq!(
+            moved("FREQ=WEEKLY;BYDAY=TU", "2026-11-17", "2026-11-18"),
+            "FREQ=WEEKLY;BYDAY=WE"
+        );
+        assert_eq!(
+            moved("FREQ=WEEKLY;BYDAY=MO,TH", "2026-11-19", "2026-11-22"),
+            "FREQ=WEEKLY;BYDAY=TH,SU"
+        );
+        assert_eq!(
+            moved("FREQ=MONTHLY;BYMONTHDAY=15", "2026-11-15", "2026-11-16"),
+            "FREQ=MONTHLY;BYMONTHDAY=16"
+        );
+        // The last day of the month, moved to the day before it.
+        assert_eq!(
+            moved("FREQ=MONTHLY;BYMONTHDAY=-1", "2026-11-30", "2026-11-29"),
+            "FREQ=MONTHLY;BYMONTHDAY=-2"
+        );
+        // The 2nd Tuesday to the 3rd Thursday, the last Friday to the last
+        // Thursday, and to the 5th Monday.
+        assert_eq!(
+            moved("FREQ=MONTHLY;BYDAY=2TU", "2026-11-10", "2026-11-19"),
+            "FREQ=MONTHLY;BYDAY=3TH"
+        );
+        assert_eq!(
+            moved("FREQ=MONTHLY;BYDAY=-1FR", "2026-11-27", "2026-11-26"),
+            "FREQ=MONTHLY;BYDAY=-1TH"
+        );
+        assert_eq!(
+            moved("FREQ=MONTHLY;BYDAY=4MO", "2026-11-23", "2026-11-30"),
+            "FREQ=MONTHLY;BYDAY=5MO"
+        );
+        assert_eq!(
+            moved("FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=9", "2026-12-09", "2027-01-02"),
+            "FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=2"
+        );
+        // Picked by where it is in the month, or on a named day, it stays.
+        let last = "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1";
+        assert_eq!(moved(last, "2026-11-30", "2026-11-27"), last);
+        let easter = "FREQ=YEARLY;X-ON=Easter Sunday";
+        assert_eq!(moved(easter, "2027-03-28", "2027-03-29"), easter);
     }
 
     #[test]

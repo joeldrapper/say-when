@@ -128,6 +128,25 @@ impl Offset {
         }
     }
 
+    /// The most days it can move a day, either way.
+    pub(crate) fn most_days(&self) -> i64 {
+        match self.shift {
+            Shift::By { count, unit } => {
+                count.unsigned_abs().min(i64::MAX as u64 / 400) as i64
+                    * match unit {
+                        OffsetUnit::Minute | OffsetUnit::Hour => 0,
+                        OffsetUnit::Day => 1,
+                        OffsetUnit::Week => 7,
+                        OffsetUnit::Month => 31,
+                        OffsetUnit::Year => 366,
+                        // However many days off there are.
+                        OffsetUnit::WorkingDay | OffsetUnit::Weekday => 3,
+                    }
+            }
+            Shift::Weekday { .. } | Shift::Weekend { .. } => 14,
+        }
+    }
+
     /// Whether it says a length of time within a day, which needs a time
     /// to count from.
     pub fn is_time(&self) -> bool {
@@ -256,7 +275,7 @@ pub(crate) fn shift_of(said: &[Token], timed: bool, like: &Parser) -> Option<Off
     };
     if let [Token::Word(unit), Token::Word(way)] = rest {
         let minutes = match unit.as_str() {
-            "minute" | "minutes" | "min" | "mins" | "m" => Some(1),
+            "minute" | "minutes" | "min" | "mins" => Some(1),
             "hour" | "hours" | "hr" | "hrs" | "h" => Some(60),
             _ => None,
         };
@@ -379,11 +398,11 @@ impl FromStr for Offset {
             _ => (false, shift),
         };
         let signed = |n: &str| -> Result<i64, ParseError> {
-            if n.is_empty() || n.len() > 9 || !n.bytes().all(|b| b.is_ascii_digit()) {
+            if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
                 return Err(error);
             }
-            let n: i64 = n.parse().map_err(|_| error)?;
-            Ok(if before { -n } else { n })
+            let n: i128 = n.parse().map_err(|_| error)?;
+            i64::try_from(if before { -n } else { n }).map_err(|_| error)
         };
         let offset = if let Some(time) = rest.strip_prefix("PT") {
             let (n, unit) = time.split_at(time.len().saturating_sub(1));
@@ -468,6 +487,10 @@ mod tests {
             assert_eq!(offset.describe(), said);
         }
         assert_eq!("+p3d".parse::<Offset>(), Ok(Offset::by(3, OffsetUnit::Day)));
+        for far in [i64::MAX, i64::MIN, 99_999_999_999] {
+            let offset = Offset::by(far, OffsetUnit::Day);
+            assert_eq!(offset.to_string().parse::<Offset>(), Ok(offset));
+        }
         for wrong in
             ["", "P", "-PT", "P3X", "P3–", "-P–", "FR", "-PT1H@09:00", "WEEKEND", "-P1D@9", "--P1D"]
         {

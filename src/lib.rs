@@ -308,7 +308,7 @@ impl Reader {
     }
 
     /// The last day a repeat on a schedule comes round on, if it stops,
-    /// after so many times or on a day.
+    /// after so many times or on a day: the last it isn't skipped on.
     pub fn last_repeat_day(&self, repeat: &Repeat) -> Option<Day> {
         let rule = &repeat.rule;
         if repeat.kind == RepeatKind::After || (rule.count.is_none() && rule.until.is_none()) {
