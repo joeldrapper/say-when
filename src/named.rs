@@ -1,12 +1,20 @@
-//! The days people call by name: Christmas Eve, Easter Monday, Mother's
-//! Day, Thanksgiving. They're vocabulary, like the names of the months:
-//! each falls by a rule that doesn't change, and which are said, and when
-//! some fall, depends on where (Mother's Day is in March in Britain and in
-//! May in America). They say nothing of who's working: a day that's off is
-//! the caller's to say (see [`crate::calendar`]).
+//! The days people call by name. A few fall on the same day every year
+//! and are said everywhere English is: Christmas, New Year, Valentine's
+//! Day, St Patrick's Day, Halloween. Those are built in, like the names of
+//! the months.
+//!
+//! The rest are the caller's to give, in its [`Calendar`]'s named days: which are said
+//! depends on where (Thanksgiving is in November in America and October in
+//! Canada, and not at all in Britain), some move from year to year (Easter
+//! and the days around it, Mother's Day), and whoever's reading may have
+//! days of their own. A caller gives each as the days it falls on, with
+//! what it's called, so the library needn't know how any of them is
+//! worked out, and [`easter`] is here to help work some out.
+//!
+//! [`Calendar`]: crate::Calendar
 
-use crate::day::{Day, Weekday};
-use crate::locale::Locale;
+use crate::day::Day;
+use crate::words::name_words;
 
 /// Easter Sunday, by the anonymous Gregorian algorithm.
 pub fn easter(year: i32) -> Option<Day> {
@@ -27,221 +35,134 @@ pub fn easter(year: i32) -> Option<Day> {
     Day::new(year, month as u32, day as u32)
 }
 
-/// The day a named day falls on in a year.
-#[derive(Clone, Copy, Debug)]
+/// The days a named day falls on.
+#[derive(Clone, Debug)]
 pub(crate) enum Falls {
     /// The same month and day every year.
     On(u32, u32),
-    /// So many days after Easter Sunday.
-    AfterEaster(i64),
-    /// So many days after the nth of a day of the week in a month, or its
-    /// last for -1: the 4th Thursday of November.
-    Nth(u32, Weekday, i64, i64),
-    /// The last of a day of the week before a day of a month.
-    Before(u32, u32, Weekday),
+    /// The days the caller gave, in order.
+    Listed(Vec<Day>),
 }
 
 /// A day with a name, found by its words.
-#[derive(Debug)]
-pub(crate) struct NamedDay {
-    pub words: &'static [&'static str],
+#[derive(Clone, Debug)]
+pub(crate) struct Called {
+    pub words: Vec<String>,
     /// A word that can follow, like "day" after "christmas".
     pub optional: Option<&'static str>,
-    pub name: &'static str,
+    pub name: String,
     pub falls: Falls,
-    /// Where it's said, or everywhere when nowhere's given.
-    pub locales: &'static [Locale],
 }
 
-impl NamedDay {
-    pub fn said_in(&self, locale: Locale) -> bool {
-        self.locales.is_empty() || self.locales.contains(&locale)
-    }
-
+impl Called {
+    /// The day it falls on in a year, the first if there are more.
     pub fn day(&self, year: i32) -> Option<Day> {
-        match self.falls {
-            Falls::On(month, day) => Day::new(year, month, day),
-            Falls::AfterEaster(days) => easter(year)?.add_days(days),
-            Falls::Nth(month, weekday, nth, after) => {
-                let first = Day::new(year, month, 1)?;
-                let day = if nth < 0 {
-                    first.month_end().previous(weekday)?
-                } else {
-                    first.next(weekday)?.add_days(7 * (nth - 1))?
-                };
-                day.add_days(after)
-            }
-            Falls::Before(month, day, weekday) => {
-                Day::new(year, month, day)?.previous_before(weekday)
+        match &self.falls {
+            Falls::On(month, day) => Day::new(year, *month, *day),
+            Falls::Listed(days) => {
+                let first = Day::new(year, 1, 1)?;
+                let at = days.partition_point(|day| *day < first);
+                days.get(at).copied().filter(|day| day.year() == year)
             }
         }
     }
 
-    /// Whether it's on the same month and day every year.
+    /// Whether it's on the same month and day every year: one that's
+    /// built in, or one whose every day the caller gave is.
     pub fn fixed(&self) -> Option<(u32, u32)> {
-        match self.falls {
-            Falls::On(month, day) => Some((month, day)),
-            _ => None,
+        match &self.falls {
+            Falls::On(month, day) => Some((*month, *day)),
+            Falls::Listed(days) => {
+                let (_, month, date) = days.first()?.ymd();
+                days.iter()
+                    .all(|day| (day.month(), day.day()) == (month, date))
+                    .then_some((month, date))
+            }
         }
     }
 }
 
-use Locale::{Australia, Canada, Ireland, NewZealand, Uk, Us};
-use Weekday::{Monday, Sunday, Thursday};
-
-const fn day(
-    words: &'static [&'static str],
-    optional: Option<&'static str>,
-    name: &'static str,
-    falls: Falls,
-    locales: &'static [Locale],
-) -> NamedDay {
-    NamedDay { words, optional, name, falls, locales }
-}
-
-const EVERYWHERE: &[Locale] = &[];
 const DAY: Option<&str> = Some("day");
 
-/// The days with names. One whose words start another's comes after it,
-/// so "christmas eve" is found before "christmas". A possessive has lost
-/// its "'s" by the time it's read, so "mother's day" is "mother day".
-pub(crate) const NAMED_DAYS: &[NamedDay] = &[
-    day(&["christmas", "eve"], None, "Christmas Eve", Falls::On(12, 24), EVERYWHERE),
-    day(&["christmas"], DAY, "Christmas Day", Falls::On(12, 25), EVERYWHERE),
-    day(&["xmas"], DAY, "Christmas Day", Falls::On(12, 25), EVERYWHERE),
-    day(&["new", "year", "eve"], None, "New Year’s Eve", Falls::On(12, 31), EVERYWHERE),
-    day(&["new", "years", "eve"], None, "New Year’s Eve", Falls::On(12, 31), EVERYWHERE),
-    day(&["new", "year"], DAY, "New Year’s Day", Falls::On(1, 1), EVERYWHERE),
-    day(&["new", "years"], DAY, "New Year’s Day", Falls::On(1, 1), EVERYWHERE),
-    day(&["valentine"], DAY, "Valentine’s Day", Falls::On(2, 14), EVERYWHERE),
-    day(&["valentines"], DAY, "Valentine’s Day", Falls::On(2, 14), EVERYWHERE),
-    day(&["st", "patrick"], DAY, "St Patrick’s Day", Falls::On(3, 17), EVERYWHERE),
-    day(&["st", "patricks"], DAY, "St Patrick’s Day", Falls::On(3, 17), EVERYWHERE),
-    day(&["halloween"], None, "Halloween", Falls::On(10, 31), EVERYWHERE),
-    day(&["good", "friday"], None, "Good Friday", Falls::AfterEaster(-2), EVERYWHERE),
-    day(&["easter", "monday"], None, "Easter Monday", Falls::AfterEaster(1), EVERYWHERE),
-    day(&["easter"], Some("sunday"), "Easter Sunday", Falls::AfterEaster(0), EVERYWHERE),
-    // Not said in the United States.
-    day(
-        &["boxing", "day"],
-        None,
-        "Boxing Day",
-        Falls::On(12, 26),
-        &[Uk, Ireland, Australia, NewZealand, Canada],
-    ),
-    day(&["st", "stephen"], DAY, "St Stephen’s Day", Falls::On(12, 26), &[Ireland]),
-    day(&["st", "stephens"], DAY, "St Stephen’s Day", Falls::On(12, 26), &[Ireland]),
-    day(&["st", "brigid"], DAY, "St Brigid’s Day", Falls::On(2, 1), &[Ireland]),
-    day(&["bonfire", "night"], None, "Bonfire Night", Falls::On(11, 5), &[Uk]),
-    day(&["may", "day"], None, "May Day", Falls::On(5, 1), &[Uk, Ireland]),
-    day(
-        &["remembrance", "day"],
-        None,
-        "Remembrance Day",
-        Falls::On(11, 11),
-        &[Uk, Ireland, Australia, NewZealand, Canada],
-    ),
-    // Mothering Sunday in Britain and Ireland, three weeks before Easter,
-    // and the second Sunday of May elsewhere.
-    day(&["mother", "day"], None, "Mother’s Day", Falls::AfterEaster(-21), &[Uk, Ireland]),
-    day(&["mothers", "day"], None, "Mother’s Day", Falls::AfterEaster(-21), &[Uk, Ireland]),
-    day(&["mothering", "sunday"], None, "Mother’s Day", Falls::AfterEaster(-21), &[Uk, Ireland]),
-    day(
-        &["mother", "day"],
-        None,
-        "Mother’s Day",
-        Falls::Nth(5, Sunday, 2, 0),
-        &[Us, Canada, Australia, NewZealand],
-    ),
-    day(
-        &["mothers", "day"],
-        None,
-        "Mother’s Day",
-        Falls::Nth(5, Sunday, 2, 0),
-        &[Us, Canada, Australia, NewZealand],
-    ),
-    // The third Sunday of June, or the first of September in Australia
-    // and New Zealand.
-    day(
-        &["father", "day"],
-        None,
-        "Father’s Day",
-        Falls::Nth(6, Sunday, 3, 0),
-        &[Uk, Ireland, Us, Canada],
-    ),
-    day(
-        &["fathers", "day"],
-        None,
-        "Father’s Day",
-        Falls::Nth(6, Sunday, 3, 0),
-        &[Uk, Ireland, Us, Canada],
-    ),
-    day(
-        &["father", "day"],
-        None,
-        "Father’s Day",
-        Falls::Nth(9, Sunday, 1, 0),
-        &[Australia, NewZealand],
-    ),
-    day(
-        &["fathers", "day"],
-        None,
-        "Father’s Day",
-        Falls::Nth(9, Sunday, 1, 0),
-        &[Australia, NewZealand],
-    ),
-    // The United States.
-    day(&["thanksgiving"], DAY, "Thanksgiving", Falls::Nth(11, Thursday, 4, 0), &[Us]),
-    day(&["black", "friday"], None, "Black Friday", Falls::Nth(11, Thursday, 4, 1), &[Us]),
-    day(&["memorial", "day"], None, "Memorial Day", Falls::Nth(5, Monday, -1, 0), &[Us]),
-    day(&["labor", "day"], None, "Labor Day", Falls::Nth(9, Monday, 1, 0), &[Us]),
-    day(&["labour", "day"], None, "Labor Day", Falls::Nth(9, Monday, 1, 0), &[Us]),
-    day(&["independence", "day"], None, "Independence Day", Falls::On(7, 4), &[Us]),
-    day(
-        &["martin", "luther", "king", "jr"],
-        DAY,
-        "Martin Luther King Jr. Day",
-        Falls::Nth(1, Monday, 3, 0),
-        &[Us],
-    ),
-    day(
-        &["martin", "luther", "king"],
-        DAY,
-        "Martin Luther King Jr. Day",
-        Falls::Nth(1, Monday, 3, 0),
-        &[Us],
-    ),
-    day(&["mlk"], DAY, "Martin Luther King Jr. Day", Falls::Nth(1, Monday, 3, 0), &[Us]),
-    day(&["presidents", "day"], None, "Presidents’ Day", Falls::Nth(2, Monday, 3, 0), &[Us]),
-    day(&["president", "day"], None, "Presidents’ Day", Falls::Nth(2, Monday, 3, 0), &[Us]),
-    day(&["juneteenth"], None, "Juneteenth", Falls::On(6, 19), &[Us]),
-    day(&["veterans", "day"], None, "Veterans Day", Falls::On(11, 11), &[Us]),
-    day(&["veteran", "day"], None, "Veterans Day", Falls::On(11, 11), &[Us]),
-    day(&["columbus", "day"], None, "Columbus Day", Falls::Nth(10, Monday, 2, 0), &[Us]),
-    // Canada.
-    day(&["thanksgiving"], DAY, "Thanksgiving", Falls::Nth(10, Monday, 2, 0), &[Canada]),
-    day(&["canada", "day"], None, "Canada Day", Falls::On(7, 1), &[Canada]),
-    day(&["victoria", "day"], None, "Victoria Day", Falls::Before(5, 25, Monday), &[Canada]),
-    day(&["labour", "day"], None, "Labour Day", Falls::Nth(9, Monday, 1, 0), &[Canada]),
-    day(&["labor", "day"], None, "Labour Day", Falls::Nth(9, Monday, 1, 0), &[Canada]),
-    // Australia and New Zealand.
-    day(&["australia", "day"], None, "Australia Day", Falls::On(1, 26), &[Australia]),
-    day(&["anzac", "day"], None, "Anzac Day", Falls::On(4, 25), &[Australia, NewZealand]),
-    day(&["waitangi", "day"], None, "Waitangi Day", Falls::On(2, 6), &[NewZealand]),
-    day(&["labour", "day"], None, "Labour Day", Falls::Nth(10, Monday, 4, 0), &[NewZealand]),
+/// The days with names said everywhere, on the same day every year. One
+/// whose words start another's comes after it, so "christmas eve" is found
+/// before "christmas". A possessive has lost its "'s" by the time it's
+/// read, so "new year's eve" is "new year eve".
+/// A day built in: its words, a word that can follow them, its name, and
+/// its month and day.
+type BuiltIn = (&'static [&'static str], Option<&'static str>, &'static str, u32, u32);
+
+const BUILT_IN: [BuiltIn; 12] = [
+    (&["christmas", "eve"], None, "Christmas Eve", 12, 24),
+    (&["christmas"], DAY, "Christmas Day", 12, 25),
+    (&["xmas"], DAY, "Christmas Day", 12, 25),
+    (&["new", "year", "eve"], None, "New Year’s Eve", 12, 31),
+    (&["new", "years", "eve"], None, "New Year’s Eve", 12, 31),
+    (&["new", "year"], DAY, "New Year’s Day", 1, 1),
+    (&["new", "years"], DAY, "New Year’s Day", 1, 1),
+    (&["valentine"], DAY, "Valentine’s Day", 2, 14),
+    (&["valentines"], DAY, "Valentine’s Day", 2, 14),
+    (&["st", "patrick"], DAY, "St Patrick’s Day", 3, 17),
+    (&["st", "patricks"], DAY, "St Patrick’s Day", 3, 17),
+    (&["halloween"], None, "Halloween", 10, 31),
 ];
+
+/// The days built in, and then the caller's: each of a day's names as
+/// the words it's said with, its first as it's written back. The
+/// caller's are given in any order, and found longest first, so "easter
+/// monday" is found before "easter".
+pub(crate) fn called<'a>(given: impl Iterator<Item = (Day, &'a [String])>) -> Vec<Called> {
+    let mut found: Vec<Called> = BUILT_IN
+        .iter()
+        .map(|(words, optional, name, month, day)| Called {
+            words: words.iter().map(|word| word.to_string()).collect(),
+            optional: *optional,
+            name: name.to_string(),
+            falls: Falls::On(*month, *day),
+        })
+        .collect();
+    // Each name the caller has, with every day it's on.
+    let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<Day>)> = Vec::new();
+    for (day, names) in given {
+        let Some(name) = names.first() else { continue };
+        match theirs.iter_mut().find(|(written, ..)| written == name) {
+            Some((_, _, days)) => days.push(day),
+            None => {
+                let mut said: Vec<Vec<String>> = Vec::new();
+                for each in names {
+                    // "mothers day" as well as "mother's day".
+                    let plain = each.replace(['’', '\''], "");
+                    for words in [name_words(each), name_words(&plain)].into_iter().flatten() {
+                        if !said.contains(&words) {
+                            said.push(words);
+                        }
+                    }
+                }
+                theirs.push((name.clone(), said, vec![day]));
+            }
+        }
+    }
+    let mut listed: Vec<Called> = Vec::new();
+    for (name, said, mut days) in theirs {
+        days.sort();
+        days.dedup();
+        for words in said {
+            listed.push(Called {
+                words,
+                optional: None,
+                name: name.clone(),
+                falls: Falls::Listed(days.clone()),
+            });
+        }
+    }
+    listed.sort_by_key(|day| std::cmp::Reverse(day.words.len()));
+    found.extend(listed);
+    found
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn on(name: &str, locale: Locale, year: i32) -> Option<String> {
-        NAMED_DAYS
-            .iter()
-            .find(|day| day.name == name && day.said_in(locale))
-            .and_then(|day| day.day(year))
-            .map(|day| day.to_string())
-    }
 
     #[test]
     fn works_out_easter() {
@@ -251,26 +172,23 @@ mod tests {
     }
 
     #[test]
-    fn the_same_name_falls_where_its_said() {
-        assert_eq!(on("Mother’s Day", Uk, 2027).as_deref(), Some("2027-03-07"));
-        assert_eq!(on("Mother’s Day", Us, 2027).as_deref(), Some("2027-05-09"));
-        assert_eq!(on("Father’s Day", Uk, 2027).as_deref(), Some("2027-06-20"));
-        assert_eq!(on("Father’s Day", Australia, 2027).as_deref(), Some("2027-09-05"));
-        assert_eq!(on("Thanksgiving", Us, 2026).as_deref(), Some("2026-11-26"));
-        assert_eq!(on("Thanksgiving", Canada, 2026).as_deref(), Some("2026-10-12"));
-        assert_eq!(on("Thanksgiving", Uk, 2026), None);
-        assert_eq!(on("Boxing Day", Us, 2026), None);
-    }
+    fn keeps_the_days_a_caller_gives() {
+        let day = |text| Day::parse(text).unwrap();
+        let names = ["Mother’s Day".to_string(), "Mothering Sunday".to_string()];
+        let given = [(day("2027-03-07"), &names[..]), (day("2026-03-15"), &names[..])];
+        let all = called(given.into_iter());
+        let mothers: Vec<_> = all.iter().filter(|named| named.name == "Mother’s Day").collect();
+        let words: Vec<String> = mothers.iter().map(|named| named.words.join(" ")).collect();
+        assert_eq!(words, ["mother day", "mothers day", "mothering sunday"]);
+        assert_eq!(mothers[0].day(2026), Some(day("2026-03-15")));
+        assert_eq!(mothers[0].day(2027), Some(day("2027-03-07")));
+        assert_eq!(mothers[0].day(2028), None);
+        assert_eq!(mothers[0].fixed(), None);
 
-    #[test]
-    fn works_out_days_that_move() {
-        assert_eq!(on("Black Friday", Us, 2026).as_deref(), Some("2026-11-27"));
-        assert_eq!(on("Memorial Day", Us, 2026).as_deref(), Some("2026-05-25"));
-        assert_eq!(on("Labor Day", Us, 2026).as_deref(), Some("2026-09-07"));
-        assert_eq!(on("Martin Luther King Jr. Day", Us, 2027).as_deref(), Some("2027-01-18"));
-        assert_eq!(on("Presidents’ Day", Us, 2027).as_deref(), Some("2027-02-15"));
-        assert_eq!(on("Victoria Day", Canada, 2026).as_deref(), Some("2026-05-18"));
-        assert_eq!(on("Labour Day", NewZealand, 2026).as_deref(), Some("2026-10-26"));
-        assert_eq!(on("Good Friday", Us, 2026).as_deref(), Some("2026-04-03"));
+        let independence = ["Independence Day".to_string()];
+        let given =
+            [(day("2026-07-04"), &independence[..]), (day("2027-07-04"), &independence[..])];
+        let all = called(given.into_iter());
+        assert_eq!(all.last().unwrap().fixed(), Some((7, 4)));
     }
 }

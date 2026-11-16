@@ -1,5 +1,5 @@
 //! What a reader is told about where and for whom it's reading: where
-//! (see [`crate::locale`]), and the days and time zones that have names
+//! (see [`crate::locale`]), and the dates and time zones that have names
 //! only the caller knows.
 
 use crate::day::Weekday;
@@ -12,8 +12,7 @@ use crate::words::name_words;
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct Options {
     /// Where English is being read and written: the order of a date in
-    /// figures, the day a week starts on, how days are labelled, and the
-    /// days that have names there.
+    /// figures, the day a week starts on, and how days are labelled.
     pub locale: Locale,
 }
 

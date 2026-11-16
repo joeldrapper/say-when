@@ -44,15 +44,21 @@ holidays. The caller says:
   New Zealand or Canada. That decides the order of a date in figures
   ("3/4" is 3 April in the UK and 4 March in the US, and both in Canada),
   the day a week starts on, how a day is labelled ("Thu 30 Nov 2028" or
-  "Thu, Nov 30, 2028"), and the days that have names there (Thanksgiving,
-  Boxing Day, Anzac Day);
-- **the days that aren't worked** (`Reader::with_calendar`): public
-  holidays, each with what it's called, and the days of the week that are
-  worked. They decide what a working day is, and their names can be said:
-  "the august bank holiday", "the next public holiday". With none, a
-  working day is Monday to Friday. Public holidays can't be worked out
-  by rule, as governments add and move them, so the library has none of
-  its own: give it a list kept from a source you trust;
+  "Thu, Nov 30, 2028");
+- **its calendar** (`Reader::with_calendar`): the days that are off, like
+  public holidays, the days that have names, and the days of the week
+  that are worked. The days off decide what a working day is, and their
+  names can be said: "the august bank holiday", "the next public
+  holiday". With none, a working day is Monday to Friday. Public
+  holidays can't be worked out by rule, as governments add and move
+  them, so the library has none of its own: give it a list kept from a
+  source you trust. The days with names can be said too: "easter
+  monday", "a week before mother's day", "thanksgiving 2027". Only the
+  few on the same day every year and said everywhere English is are
+  built in (Christmas, New Year, Valentine's Day, St Patrick's Day and
+  Halloween), as which others are said depends on where, and many move
+  from year to year. `easter` works out Easter Sunday, for the days that
+  hang on it;
 - **named dates**, for days only it knows by name, like people's birthdays
   (`Reader::with_named_dates`);
 - **the names time zones go by**, for an event's sentence to say which its
@@ -60,16 +66,22 @@ holidays. The caller says:
   back as it was given.
 
 ```rust
-use say_when::{Calendar, Day, DayOff, Locale, Options, Reader};
+use say_when::{Calendar, Day, DayOff, Locale, NamedDay, Options, Reader, easter};
 
-let thanksgiving = DayOff { day: Day::new(2026, 11, 26).unwrap(), name: Some("Thanksgiving".into()) };
-let reader = Reader::new(Options::new(Locale::Us))
-    .with_calendar(Calendar { days_off: vec![thanksgiving], ..Calendar::default() });
+let calendar = Calendar {
+    days_off: vec![DayOff::new(Day::new(2026, 11, 26).unwrap(), Some("Thanksgiving"))],
+    named_days: vec![NamedDay::new(easter(2027).unwrap(), ["Easter Sunday", "Easter"])],
+    ..Calendar::default()
+};
+let reader = Reader::new(Options::new(Locale::Us)).with_calendar(calendar);
 let today = Day::new(2026, 10, 20).unwrap();
 
 let read = reader.days("2 working days after 11/25", today);
 assert_eq!(read[0].day.to_string(), "2026-11-30");
 assert_eq!(read[0].how.as_deref(), Some("2 working days after Wed, Nov 25"));
+
+let read = reader.days("a week before easter", today);
+assert_eq!(read[0].day.to_string(), "2027-03-21");
 ```
 
 ## What it does with what it can't read

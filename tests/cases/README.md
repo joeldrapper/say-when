@@ -14,11 +14,14 @@ public holidays, and the time an event is at when nothing says.
 | `clocks.jsonl`  | `read_clock`, after the time `after` when it has one |
 
 A case is read for its `locale`, or the UK, with the public holidays of
-its `region` as its calendar, from the fixture's `calendars`: the bank
+its `region` as its days off, from the fixture's `calendars`: the bank
 holidays of England and Wales, Scotland and Northern Ireland, and the
 federal holidays of the United States, for 2015 to 2045. A UK case with
 no region has England and Wales's, and a case for anywhere else with no
-region has no calendar. The cases with a locale didn't come from the TypeScript, which
+region has none. Its named days are its locale's, from the fixture's
+`named_days`: the days said there that aren't built in, like Easter,
+Mother's Day and Thanksgiving, each with every day it falls on in the
+same years. The cases with a locale didn't come from the TypeScript, which
 read British English only: each was read through by hand when it was
 added.
 

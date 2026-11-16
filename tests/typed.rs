@@ -3,7 +3,8 @@
 //! what joins them, put together at random, thousands of times over.
 
 use say_when::{
-    Calendar, Day, DayOff, EventContext, Locale, Mention, Options, Reader, Time, read_clock,
+    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDay, Options, Reader, Time,
+    read_clock,
 };
 
 const WORDS: [&str; 64] = [
@@ -105,17 +106,23 @@ impl Random {
 
 #[test]
 fn nothing_typed_panics_or_leaves_the_calendar() {
-    // A reader for each place, with a calendar of a few days off.
-    let off = |day: &str, name: Option<&str>| DayOff {
-        day: Day::parse(day).unwrap(),
-        name: name.map(str::to_string),
-    };
+    // A reader for each place, with a calendar of a few days off and a
+    // few with names, some at the ends of time.
+    let off = |day: &str, name: Option<&str>| DayOff::new(Day::parse(day).unwrap(), name);
+    let named = |day: &str, names: &[&str]| NamedDay::new(Day::parse(day).unwrap(), names.to_vec());
     let calendar = Calendar {
         days_off: vec![
             off("2026-12-25", Some("Christmas Day")),
             off("2027-05-03", Some("Early May bank holiday")),
             off("9999-12-31", None),
             off("0001-01-01", Some("the of")),
+        ],
+        named_days: vec![
+            named("2026-04-05", &["Easter Sunday", "easter"]),
+            named("2027-03-28", &["Easter Sunday", "easter"]),
+            named("9999-12-30", &["The End", "end"]),
+            named("0001-01-02", &["Mother’s Day", "2nd", "next"]),
+            named("2026-11-26", &[]),
         ],
         ..Calendar::default()
     };

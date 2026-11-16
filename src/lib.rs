@@ -14,7 +14,7 @@ mod rule;
 mod suggest;
 mod words;
 
-pub use calendar::{Calendar, DayOff};
+pub use calendar::{Calendar, DayOff, NamedDay};
 pub use clock::read_clock;
 pub use day::{Day, ParseError, Time, Weekday, days_in_month, is_leap_year};
 pub use days::SpanKind;
@@ -338,10 +338,11 @@ impl Reader {
         let keep: Vec<&str> = names.map(String::as_str).collect();
         let whats = self.named.iter().flat_map(|named| named.what.iter().map(String::as_str));
         // And the words of the days with names here, like "thanksgiving".
-        let days = named::NAMED_DAYS
+        let days = self
+            .calendar
+            .named
             .iter()
-            .filter(|day| day.said_in(self.options.locale))
-            .flat_map(|day| day.words.iter().copied())
+            .flat_map(|day| day.words.iter().map(String::as_str))
             .filter(|word| word.len() >= 8);
         let more: Vec<&str> = more.iter().copied().chain(whats).collect();
         suggest::corrected(typed, &more, &days.collect::<Vec<_>>(), &keep)
@@ -350,6 +351,6 @@ impl Reader {
     /// Whether a word on its own is a day's name here, like "halloween"
     /// or "thanksgiving".
     pub(crate) fn names_a_day(&self, word: &str) -> bool {
-        named::NAMED_DAYS.iter().any(|day| day.said_in(self.options.locale) && day.words == [word])
+        self.calendar.named.iter().any(|day| day.words.len() == 1 && day.words[0] == word)
     }
 }

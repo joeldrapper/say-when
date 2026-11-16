@@ -25,7 +25,6 @@
 use crate::calendar::{Said, Working};
 use crate::day::{Day, Weekday};
 use crate::locale::{Locale, Order, month_name};
-use crate::named::NAMED_DAYS;
 use crate::options::{MONTH_WORDS, Named, WEEKDAY_WORDS, weekday_alias};
 use crate::words::Token;
 
@@ -155,7 +154,7 @@ pub(crate) enum DayExpr {
     Date { month: u32, day: u32, year: YearRef },
     /// "the 3rd": the next time that day of the month comes round.
     DayOfMonth(u32),
-    /// "christmas", "easter 2027": one of [`NAMED_DAYS`].
+    /// "christmas", "easter 2027": one of the calendar's named days.
     Holiday { index: usize, year: YearRef },
     /// "mum's birthday": one of the caller's named dates.
     Named { index: usize, year: YearRef },
@@ -716,15 +715,15 @@ impl<'a> Parser<'a> {
                 word == typed || (self.last(at) && typed.len() >= 2 && word.starts_with(typed))
             })
         };
-        for (index, holiday) in NAMED_DAYS.iter().enumerate() {
-            if !starts(holiday.words[0]) || !holiday.said_in(self.locale) {
+        for (index, holiday) in self.calendar.named.iter().enumerate() {
+            if !starts(&holiday.words[0]) {
                 continue;
             }
             let said = holiday
                 .words
                 .iter()
                 .enumerate()
-                .all(|(offset, word)| self.is(at + offset, &[word]));
+                .all(|(offset, word)| self.is(at + offset, &[word.as_str()]));
             if !said {
                 continue;
             }
@@ -1082,9 +1081,9 @@ impl Context<'_> {
                 })?)
             }
             DayExpr::Holiday { index, year } => {
-                let holiday = &NAMED_DAYS[*index];
+                let holiday = calendar.named.get(*index)?;
                 let day = self.yearly(*year, |year| holiday.day(year))?;
-                Found::how(day, holiday.name.to_string())
+                Found::how(day, holiday.name.clone())
             }
             DayExpr::Named { index, year } => {
                 let named = self.named.get(*index)?;

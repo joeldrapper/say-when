@@ -1,19 +1,23 @@
-//! The days people don't work, which only the caller knows: public
-//! holidays are set by governments, differ from place to place, and change
-//! from year to year, so none is built in. A caller gives a [`Calendar`]:
-//! the days that are off, each with what it's called if it's called
-//! anything, and which days of the week are worked.
+//! The days that are off and the days that have names, which only the
+//! caller knows: public holidays are set by governments, differ from place
+//! to place, and change from year to year, and which days have names
+//! depends on where (see [`crate::named`]). So a caller gives a
+//! [`Calendar`]: the days that are off, the days that have names, and which
+//! days of the week are worked.
 //!
-//! The library asks it one thing, whether a day is a working day, for "3
-//! working days before christmas" and "the last working day of the month".
-//! And the names in it can be said: with a day in it called "Summer bank
+//! The library asks it whether a day is a working day, for "3 working
+//! days before christmas" and "the last working day of the month". And the
+//! names in it can be said: with a day off in it called "Summer bank
 //! holiday", "the summer bank holiday", "the august bank holiday" and "the
 //! next bank holiday" all read, without the library knowing what a bank
-//! holiday is.
+//! holiday is, and with days called "Mother's Day", "mother's day 2027"
+//! and "a week before mother's day" do.
 //!
-//! With no calendar, a working day is Monday to Friday.
+//! With no calendar, a working day is Monday to Friday, and only the days
+//! built in have names.
 
 use crate::day::{Day, Weekday};
+use crate::named::{Called, called};
 use crate::words::{Token, tokens};
 use std::collections::HashSet;
 
@@ -23,27 +27,63 @@ use std::collections::HashSet;
 pub struct DayOff {
     /// The day.
     pub day: Day,
-    /// What it's called, like "Summer bank holiday", if anything.
+    /// What it's called, like "Summer bank holiday", for it to be said:
+    /// "the summer bank holiday", "the august bank holiday".
     #[cfg_attr(feature = "serde", serde(default))]
     pub name: Option<String>,
 }
 
-/// The days that aren't worked: some days of the week, and the days off a
-/// caller knows of.
+impl DayOff {
+    /// A day off, called something or not.
+    pub fn new(day: Day, name: Option<&str>) -> DayOff {
+        DayOff { day, name: name.map(str::to_string) }
+    }
+}
+
+/// A day that's called something, like "Mother’s Day" or "Easter Sunday":
+/// one of the days it falls on.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct NamedDay {
+    /// The day.
+    pub day: Day,
+    /// What it's called, the first as it's written back: `["Mother’s Day",
+    /// "Mothering Sunday"]`. Each can be said, with its apostrophes or
+    /// without them: "mothers day 2027", "a week before mothering sunday".
+    pub names: Vec<String>,
+}
+
+impl NamedDay {
+    /// A day called something.
+    pub fn new<S: Into<String>>(day: Day, names: impl IntoIterator<Item = S>) -> NamedDay {
+        NamedDay { day, names: names.into_iter().map(Into::into).collect() }
+    }
+}
+
+/// The days that are off and the days that have names, as a caller knows
+/// them, and the days of the week that are worked.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct Calendar {
-    /// The days off, in any order. Days it doesn't cover, like those of
-    /// years it has nothing for, count as worked when their weekday is.
+    /// The days off, in any order. Years it has none for have every day
+    /// of the working week worked.
     pub days_off: Vec<DayOff>,
+    /// The days with names, beyond those built in, in any order: each
+    /// day a name falls on, for every year it can be said in. A day off
+    /// that's said like this as well, like Thanksgiving, is given in both.
+    pub named_days: Vec<NamedDay>,
     /// The days of the week that are worked: Monday to Friday, unless said.
     pub working_week: Vec<Weekday>,
 }
 
 impl Default for Calendar {
     fn default() -> Calendar {
-        Calendar { days_off: Vec::new(), working_week: Weekday::ALL[..5].to_vec() }
+        Calendar {
+            days_off: Vec::new(),
+            named_days: Vec::new(),
+            working_week: Weekday::ALL[..5].to_vec(),
+        }
     }
 }
 
@@ -60,7 +100,7 @@ const ANY: [&[&str]; 7] = [
 
 /// A calendar as the readers ask it: its days in order, each name as the
 /// words a phrase would have.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub(crate) struct Working {
     days: Vec<(Day, Option<String>, Vec<String>)>,
     /// Each name there is among them, once, as its words.
@@ -71,10 +111,13 @@ pub(crate) struct Working {
     /// those for any day off.
     said: HashSet<String>,
     week: [bool; 7],
+    /// The days with names: those built in, then the calendar's.
+    pub named: Vec<Called>,
 }
 
 impl From<Calendar> for Working {
     fn from(calendar: Calendar) -> Working {
+        let named = called(calendar.named_days.iter().map(|named| (named.day, &named.names[..])));
         let mut days: Vec<_> = calendar
             .days_off
             .into_iter()
@@ -104,7 +147,7 @@ impl From<Calendar> for Working {
         let mut off: Vec<Day> =
             days.iter().map(|(day, ..)| *day).filter(|day| week[day.weekday() as usize]).collect();
         off.dedup();
-        Working { days, names, off, said, week }
+        Working { days, names, off, said, week, named }
     }
 }
 
@@ -117,6 +160,12 @@ fn name_words(name: &str) -> Vec<String> {
             Token::Ordinal(n) => n.to_string(),
         })
         .collect()
+}
+
+impl Default for Working {
+    fn default() -> Working {
+        Working::weekdays()
+    }
 }
 
 impl Working {
@@ -250,10 +299,7 @@ mod tests {
     use super::*;
 
     fn calendar() -> Working {
-        let off = |day: &str, name: Option<&str>| DayOff {
-            day: Day::parse(day).unwrap(),
-            name: name.map(str::to_string),
-        };
+        let off = |day: &str, name: Option<&str>| DayOff::new(Day::parse(day).unwrap(), name);
         Working::from(Calendar {
             days_off: vec![
                 off("2026-12-25", Some("Christmas Day")),

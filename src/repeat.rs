@@ -328,7 +328,7 @@ impl RepeatParser<'_> {
                     Some((month, day))
                 }
                 DayExpr::Holiday { index, year: crate::days::YearRef::Coming } => {
-                    crate::named::NAMED_DAYS[index].fixed()
+                    self.context.calendar.named.get(index).and_then(|named| named.fixed())
                 }
                 DayExpr::Named { index, year: crate::days::YearRef::Coming } => {
                     self.context.named.get(index).map(|named| (named.month, named.day))

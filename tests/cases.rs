@@ -8,8 +8,8 @@
 //! cargo test -p say-when --features serde --test cases` and read the diff.
 
 use say_when::{
-    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDate, Options, Reader, Time,
-    ZoneNames, read_clock,
+    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDate, NamedDay, Options, Reader,
+    Time, ZoneNames, read_clock,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -22,7 +22,17 @@ struct Fixture {
     zones: ZoneNames,
     /// Each region's public holidays, for the years the cases are read in.
     calendars: HashMap<String, Vec<DayOff>>,
+    /// The days with names said in each locale that aren't built in, like
+    /// Easter and Thanksgiving, for the same years.
+    named_days: HashMap<Locale, Vec<NamedDays>>,
     fallback_time: Time,
+}
+
+/// A day with a name, and every day it falls on.
+#[derive(Deserialize)]
+struct NamedDays {
+    names: Vec<String>,
+    days: Vec<Day>,
 }
 
 fn directory() -> PathBuf {
@@ -36,22 +46,31 @@ fn fixture() -> Fixture {
 
 /// The reader a case is read with: for its `locale`, or Britain, with
 /// the public holidays of its `region`, or England and Wales's, or for
-/// another locale, none unless it says.
+/// another locale, none unless it says, and the days with names said in
+/// the locale.
 fn reader(case: &Value, fixture: &Fixture) -> Reader {
     let locale = match case.get("locale") {
         Some(locale) => serde_json::from_value::<Locale>(locale.clone()).unwrap(),
         None => Locale::Uk,
     };
     let region = case["region"].as_str().or((locale == Locale::Uk).then_some("england-and-wales"));
-    let mut reader = Reader::new(Options::new(locale))
+    let reader = Reader::new(Options::new(locale))
         .with_named_dates(fixture.named.clone())
         .with_zones(fixture.zones.clone());
-    if let Some(region) = region {
-        let days_off =
-            fixture.calendars.get(region).unwrap_or_else(|| panic!("no calendar for {region}"));
-        reader =
-            reader.with_calendar(Calendar { days_off: days_off.clone(), ..Calendar::default() });
-    }
+    let days_off = match region {
+        Some(region) => fixture
+            .calendars
+            .get(region)
+            .unwrap_or_else(|| panic!("no calendar for {region}"))
+            .clone(),
+        None => Vec::new(),
+    };
+    let named_days =
+        fixture.named_days.get(&locale).into_iter().flatten().flat_map(|named| {
+            named.days.iter().map(|day| NamedDay::new(*day, named.names.clone()))
+        });
+    let calendar = Calendar { days_off, named_days: named_days.collect(), ..Calendar::default() };
+    let reader = reader.with_calendar(calendar);
     match case["about"].as_str() {
         Some(about) => reader.about(about),
         None => reader,

@@ -1,8 +1,9 @@
 //! Where English is being read and written: the order of a date in
-//! figures, the day a week starts on, how a day is labelled, and the days
-//! that have names there. Everything that differs from one place to
-//! another is here or in [`crate::named`], as data, so the rules that read
-//! a phrase are the same everywhere.
+//! figures, the day a week starts on, and how a day is labelled. Everything
+//! else that differs from one place to another, like its public holidays
+//! and the days that have names there, is the caller's to give, in a
+//! [`crate::Calendar`], so the rules that read a phrase are the same
+//! everywhere.
 
 use crate::day::{Day, Weekday};
 
