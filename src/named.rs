@@ -183,6 +183,9 @@ pub(crate) fn same(one: &str, other: &str) -> bool {
     plain(one).is_some() && plain(one) == plain(other)
 }
 
+/// The first and last days of a time a named day's on.
+type Times = (Day, Day);
+
 /// The days built in, and then the caller's: each of a day's names as
 /// the words it's said with, its first as it's written back. The
 /// caller's are given in any order, and found longest first, so "easter
@@ -199,7 +202,7 @@ pub(crate) fn called<'a>(given: impl Iterator<Item = ((Day, Day), &'a [String])>
         .collect();
     // Each day the caller has, by the first of its names, with every way
     // it's said and every day it's on.
-    let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<(Day, Day)>)> = Vec::new();
+    let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<Times>)> = Vec::new();
     for (day, names) in given {
         let Some(name) = names.first() else { continue };
         let at = match theirs.iter().position(|(written, ..)| same(written, name)) {
