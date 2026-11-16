@@ -140,6 +140,9 @@ pub(crate) enum SpanExpr {
     Quarter { quarter: u32, year: YearRef },
     /// "2027".
     Year(i32),
+    /// "the weekend before christmas", "the weekend after easter": the
+    /// first that's all before a day, or all after it.
+    WeekendBeside { before: bool, base: Box<DayExpr> },
     /// "ramadan", "half term 2027": one of the calendar's named days that
     /// lasts more than a day.
     Named { index: usize, year: YearRef },
@@ -431,6 +434,14 @@ impl<'a> Parser<'a> {
                 if self.is(of, &["commencing", "beginning", "starting"]) { of + 1 } else { of };
             for (day, end) in self.day(of, depth + 1) {
                 found.push((SpanExpr::WeekOf(Box::new(day)), end));
+            }
+        }
+
+        // "the weekend before christmas", "the weekend after easter".
+        if !said && self.is(start, &["weekend"]) && self.is(start + 1, &["before", "after"]) {
+            let before = self.is(start + 1, &["before"]);
+            for (base, end) in self.day(start + 2, depth + 1) {
+                found.push((SpanExpr::WeekendBeside { before, base: Box::new(base) }, end));
             }
         }
 
@@ -1079,6 +1090,17 @@ impl Context<'_> {
                 })
             }
             SpanExpr::Year(year) => year_span(*year),
+            SpanExpr::WeekendBeside { before, base } => {
+                let from = self.day(base)?.end_if(!*before);
+                let saturday = weekend_beside(from.day, *before)?;
+                let words = if *before { "before" } else { "after" };
+                Some(Span {
+                    first: saturday,
+                    last: saturday.add_days(1)?,
+                    name: format!("the weekend {words} {}", self.label(from.day)),
+                    kind: SpanKind::Weekend,
+                })
+            }
             SpanExpr::Named { index, year } => {
                 let holiday = self.calendar.named.get(*index)?;
                 let (first, last) = self.held(holiday, *year)?;
@@ -1333,6 +1355,16 @@ fn pick(span: &Span, nth: i64, counts: impl Fn(Day) -> bool) -> Option<Day> {
         }
     }
     None
+}
+
+/// The Saturday of the first weekend all before a day, or all after it.
+pub(crate) fn weekend_beside(day: Day, before: bool) -> Option<Day> {
+    if before {
+        let saturday = day.previous_before(Weekday::Saturday)?;
+        if saturday.add_days(1)? < day { Some(saturday) } else { saturday.add_days(-7) }
+    } else {
+        day.next_after(Weekday::Saturday)
+    }
 }
 
 /// A day moved by so many of a unit, or so many working days or weekdays,

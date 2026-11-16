@@ -16283,3 +16283,10 @@
 {"out":{"days":[{"about":null,"day":"2026-10-26","how":"Half term"}],"span":{"first":"2026-10-26","kind":"named","last":"2026-10-30"}},"text":"half term","today":"2026-03-01"}
 {"out":{"days":[{"about":null,"day":"2026-11-06","how":"the week after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the week after half term","today":"2026-01-10"}
 {"out":{"days":[{"about":null,"day":"2026-11-06","how":"the week after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the week after half term","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-03-07","how":null}],"span":{"first":"2026-03-07","kind":"weekend","last":"2026-03-08"}},"text":"the weekend before mothers day","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-04-11","how":null}],"span":{"first":"2026-04-11","kind":"weekend","last":"2026-04-12"}},"text":"the weekend after easter","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-02-14","how":null}],"span":{"first":"2026-02-14","kind":"weekend","last":"2026-02-15"}},"text":"the weekend before ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-03-21","how":null}],"span":{"first":"2026-03-21","kind":"weekend","last":"2026-03-22"}},"text":"the weekend after ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-12-19","how":null}],"span":{"first":"2026-12-19","kind":"weekend","last":"2026-12-20"}},"text":"the weekend before christmas","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-11-21","how":null}],"span":{"first":"2026-11-21","kind":"weekend","last":"2026-11-22"}},"text":"the weekend after 14 nov","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-11-07","how":null}],"span":{"first":"2026-11-07","kind":"weekend","last":"2026-11-08"}},"text":"the weekend before sat 14 nov","today":"2026-01-10"}

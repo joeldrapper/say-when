@@ -3,11 +3,11 @@
 //! what joins them, put together at random, thousands of times over.
 
 use say_when::{
-    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDay, Options, Reader, Time,
+    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDay, Offset, Options, Reader, Time,
     read_clock,
 };
 
-const WORDS: [&str; 64] = [
+const WORDS: [&str; 68] = [
     "the",
     "of",
     "in",
@@ -72,6 +72,10 @@ const WORDS: [&str; 64] = [
     "all",
     "rest",
     "#Priya",
+    "hour",
+    "minutes",
+    "an",
+    "end",
 ];
 const NUMBERS: [&str; 16] = [
     "0",
@@ -162,6 +166,13 @@ fn nothing_typed_panics_or_leaves_the_calendar() {
         };
         let event = reader.event(&text, &context);
         assert!(event.start_day <= event.end_day, "{text:?}: {event:?}");
+        if let Some(offset) = reader.offset(&text) {
+            assert_eq!(offset.to_string().parse::<Offset>(), Ok(offset), "{text:?}");
+            offset.describe();
+            reader.offset_from(&offset, today, Some(Time::MIDNIGHT));
+        }
+        "-P1D@09:00x".parse::<Offset>().ok();
+        text.parse::<Offset>().ok();
         read_clock(&text, None);
         reader.corrected(&text, &[]);
     }

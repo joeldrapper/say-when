@@ -53,7 +53,7 @@ impl Frequency {
     }
 }
 
-const CODES: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+pub(crate) const CODES: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
 /// A weekday, with which of them in the month it is for monthly and yearly
 /// rules: 2 for the second, -1 for the last, or 0 for every one.

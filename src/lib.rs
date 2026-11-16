@@ -8,6 +8,7 @@ mod days;
 mod event;
 mod locale;
 mod named;
+mod offset;
 mod options;
 mod repeat;
 mod rule;
@@ -21,6 +22,7 @@ pub use days::SpanKind;
 pub use event::{EventContext, EventRead, EventReading, EventRepeat, Meal, Mention};
 pub use locale::Locale;
 pub use named::easter;
+pub use offset::{Offset, OffsetUnit, Shift};
 pub use options::{NamedDate, Options, ZoneNames};
 pub use repeat::{Repeat, RepeatKind};
 pub use rule::{ByDay, Frequency, Rule};
@@ -291,6 +293,28 @@ impl Reader {
     /// to 7, or the first after `after` when it's given.
     pub fn time(&self, text: &str, after: Option<Time>) -> Option<Time> {
         read_clock(text, after)
+    }
+
+    /// Where something is from a day, said in words, like a reminder from
+    /// its event: "3 days before", "2 working days before", "the friday
+    /// before", "the weekend before", "the day before at 9am", "9am on the
+    /// day", "an hour before". It says which way, so "3 days" alone is
+    /// nothing.
+    pub fn offset(&self, text: &str) -> Option<Offset> {
+        offset::read(self, text)
+    }
+
+    /// Where an offset lands from a day, and the time on it if there's
+    /// one: at the time it says, or the one it's from. Working days are
+    /// counted by this reader's calendar. A length of time within a day,
+    /// like an hour, lands nowhere from a day with no time.
+    pub fn offset_from(
+        &self,
+        offset: &Offset,
+        day: Day,
+        time: Option<Time>,
+    ) -> Option<(Day, Option<Time>)> {
+        offset.from(day, time, &self.calendar)
     }
 
     /// Reads an event typed out as a sentence, like "Lunch with Priya

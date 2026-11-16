@@ -174,6 +174,24 @@ fn events() {
 }
 
 #[test]
+fn offsets() {
+    run("offsets", |_, said, reader, _| {
+        // Landed from a Monday at 2pm, and from the same day with no time.
+        let from = Day::new(2026, 11, 16).unwrap();
+        let two = Time::new(14, 0);
+        match reader.offset(said) {
+            Some(offset) => json!({
+                "offset": offset,
+                "said": offset.describe(),
+                "from": reader.offset_from(&offset, from, two),
+                "all_day": reader.offset_from(&offset, from, None),
+            }),
+            None => Value::Null,
+        }
+    });
+}
+
+#[test]
 fn clocks() {
     run("clocks", |case, said, _, _| {
         let after = case["after"].as_str().and_then(Time::parse);
