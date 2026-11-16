@@ -14,7 +14,12 @@
 //! - the time zone its times are in, when one's named: "9am New York
 //!   time", "10:00 PT".
 //!
-//! and the title is what's left.
+//! and the title is what's left. Each word says what it was read as, so
+//! what's typed can show it.
+//!
+//! When something is can be read on its own, with the same passes but for
+//! how it repeats and where it is, and nothing assumed: no time when none
+//! is said, and no length for one. It's nothing if any word is left over.
 //!
 //! Each word of the sentence starts as part of the title. One pass after
 //! another takes the words it reads as something else, in an order that
@@ -171,6 +176,9 @@ pub struct EventReading {
     /// Other days what was typed might start on, like the end of the
     /// week's Sunday after its Friday.
     pub others: Vec<Day>,
+    /// Each word typed, and what it was read as, with a mention's words
+    /// as one.
+    pub words: Vec<ReadWord>,
 }
 
 impl EventReading {
@@ -180,13 +188,97 @@ impl EventReading {
     }
 }
 
+/// When something is, said with nothing else: "tomorrow 2-4pm", "fri 6pm
+/// to sun 5pm", "next week", "at 3 for an hour", read as an event's
+/// sentence would be read.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub struct WhenReading {
+    /// The day it starts: today, if only a time is said.
+    pub start_day: Day,
+    /// The day it ends.
+    pub end_day: Day,
+    /// The time it starts, or `None` over whole days.
+    pub start_time: Option<Time>,
+    /// The time it ends, or `None` over whole days, or when it's at a
+    /// time and not said until when, like "at 3", as nothing's assumed.
+    pub end_time: Option<Time>,
+    /// The time zone its times are in, when one's named.
+    pub time_zone: Option<String>,
+    /// Other days it might start on, like the end of the week's Sunday
+    /// after its Friday.
+    pub others: Vec<Day>,
+    /// Each word typed, and what it was read as.
+    pub words: Vec<ReadWord>,
+}
+
+impl WhenReading {
+    /// Whether it's over whole days, with no times.
+    pub fn is_all_day(&self) -> bool {
+        self.start_time.is_none()
+    }
+}
+
+/// A word of what was typed, and what it was read as, for showing which
+/// words said what as they're typed, like the day and time in a title
+/// field.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Role {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub struct ReadWord {
+    /// Where it starts in the text, in bytes, as `&text[start..end]`.
+    pub start: usize,
+    /// Where it ends in the text, in bytes.
+    pub end: usize,
+    /// What it was read as.
+    pub role: WordRole,
+}
+
+/// What a word was read as. A word that leads to what it's part of, like
+/// "on" in "on friday", "for" in "for 2 hours" or "at" before a place,
+/// is read as what it leads to.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[non_exhaustive]
+pub enum WordRole {
+    /// Part of the title: what's left.
     Title,
-    Mention,
-    When,
+    /// One of the mentions given, by its place among them: "#Priya", all
+    /// of its words as one.
+    Mention(usize),
+    /// A day, or days: "tomorrow", "next friday", "6-8 nov", "this
+    /// weekend", "all of november".
+    Day,
+    /// A time, or between two, or a part of the day: "at 3", "2-4pm",
+    /// "half three", "tomorrow morning"'s "morning".
+    Time,
+    /// How long: "for 2 hours", "30 min", "all day", "for 3 nights".
+    Length,
+    /// How it repeats: "every other friday", "weekly until christmas".
+    Repeat,
+    /// The time zone its times are in: "New York time", "PT".
+    TimeZone,
+    /// Where it is: "at Dishoom".
     Place,
 }
+
+impl WordRole {
+    /// Whether it says when.
+    fn is_when(self) -> bool {
+        matches!(
+            self,
+            WordRole::Day
+                | WordRole::Time
+                | WordRole::Length
+                | WordRole::Repeat
+                | WordRole::TimeZone
+        )
+    }
+}
+
+use WordRole as Role;
 
 #[derive(Clone, Debug)]
 struct Word {
@@ -195,6 +287,9 @@ struct Word {
     /// In lower case, without what punctuation ends it, to read.
     plain: String,
     role: Role,
+    /// Where it is in what was typed, in bytes.
+    start: usize,
+    end: usize,
 }
 
 const EVENING: Hours = Hours::new(17, 24);
@@ -555,6 +650,8 @@ struct Sentence<'a> {
     reader: &'a Reader,
     context: &'a EventContext,
     words: Vec<Word>,
+    /// Whether it's an event's, rather than only when.
+    event: bool,
 }
 
 impl Sentence<'_> {
@@ -594,7 +691,7 @@ impl Sentence<'_> {
         let words: Vec<&str> = self
             .words
             .iter()
-            .filter(|word| matches!(word.role, Role::Title | Role::Mention))
+            .filter(|word| matches!(word.role, Role::Title | Role::Mention(_)))
             .map(|word| word.text.as_str())
             .collect();
         words.join(" ").trim_end_matches([' ', ',', ';', ':', '–', '-']).to_string()
@@ -632,7 +729,8 @@ impl Sentence<'_> {
                 let after: String =
                     last.chars().skip(parts[parts.len() - 1].chars().count()).collect();
                 self.words[index].text = format!("{}{after}", self.context.mentions[*which].said);
-                self.words[index].role = Role::Mention;
+                self.words[index].role = Role::Mention(*which);
+                self.words[index].end = self.words[end - 1].end;
                 self.words.drain(index + 1..end);
                 found.push(*which);
             }
@@ -684,7 +782,7 @@ impl Sentence<'_> {
                         ZoneNames::find(&zones.before_word_time, &self.said(from, index))
                     {
                         let zone = zone.to_string();
-                        self.take(from, index + 1, Role::When);
+                        self.take(from, index + 1, Role::TimeZone);
                         return Some(zone);
                     }
                 }
@@ -701,7 +799,7 @@ impl Sentence<'_> {
                     {
                         let zone = zone.to_string();
                         let time = self.plain(index + size) == Some("time");
-                        self.take(index, index + size + usize::from(time), Role::When);
+                        self.take(index, index + size + usize::from(time), Role::TimeZone);
                         return Some(zone);
                     }
                 }
@@ -719,12 +817,12 @@ impl Sentence<'_> {
             }
             let word = self.plain(index).unwrap_or_default();
             if matches!(word, "all-day" | "allday") {
-                self.take(index, index + 1, Role::When);
+                self.take(index, index + 1, Role::Length);
                 return true;
             }
             if matches!(word, "all" | "whole") && self.plain(index + 1) == Some("day") {
                 let the = word == "whole" && self.before(index, 1) == Some("the");
-                self.take(index - usize::from(the), index + 2, Role::When);
+                self.take(index - usize::from(the), index + 2, Role::Length);
                 return true;
             }
         }
@@ -744,22 +842,22 @@ impl Sentence<'_> {
             let free =
                 |sentence: &Sentence, back: usize| index >= back && sentence.free(index - back);
             if word == "tonight" {
-                self.take(index, index + 1, Role::When);
+                self.take(index, index + 1, Role::Time);
                 today = true;
             } else if self.before(index, 1) == Some("this") && free(self, 1) && word != "night" {
-                self.take(index - 1, index + 1, Role::When);
+                self.take(index - 1, index + 1, Role::Time);
                 today = true;
             } else if self.before(index, 1) == Some("the")
                 && self.before(index, 2) == Some("in")
                 && free(self, 2)
             {
-                self.take(index - 2, index + 1, Role::When);
+                self.take(index - 2, index + 1, Role::Time);
             } else if self.before(index, 1) == Some("at") && word == "night" && free(self, 1) {
-                self.take(index - 1, index + 1, Role::When);
+                self.take(index - 1, index + 1, Role::Time);
             } else if free(self, 1)
                 && self.before(index, 1).is_some_and(|before| DAY_WORDS.contains(&before))
             {
-                self.take(index, index + 1, Role::When);
+                self.take(index, index + 1, Role::Time);
             }
             if self.free(index) {
                 named = named.or(Some(found));
@@ -797,10 +895,10 @@ impl Sentence<'_> {
             return true;
         }
         // After days read already, as in "6-8 nov 9-5".
-        if before_role == Some(Role::When) && !before.is_some_and(leads) {
+        if before_role.is_some_and(Role::is_when) && !before.is_some_and(leads) {
             return true;
         }
-        if self.role(at + size) == Some(Role::When)
+        if self.role(at + size).is_some_and(Role::is_when)
             && after.is_some_and(|after| matches!(after, "tonight" | "in" | "at" | "this"))
         {
             return true;
@@ -818,7 +916,7 @@ impl Sentence<'_> {
         for index in 0..self.words.len() {
             let until = self.plain(index).is_some_and(|word| UNTIL.contains(&word));
             if self.free(index) && until && self.plain(index + 1) == Some("late") {
-                self.take(index, index + 2, Role::When);
+                self.take(index, index + 2, Role::Time);
             }
         }
         #[derive(Clone, Copy, PartialEq)]
@@ -840,7 +938,7 @@ impl Sentence<'_> {
                         continue;
                     }
                     let Some((end, size)) = clock_at(&plains, index + 1, true) else { continue };
-                    self.take(index, index + 1 + size, Role::When);
+                    self.take(index, index + 1 + size, Role::Time);
                     return Some((None, Some(EndTime::After(end)), false));
                 }
                 let lead = pass == Pass::Led && leads(word);
@@ -867,7 +965,7 @@ impl Sentence<'_> {
                         self.beside(at, 1)
                     };
                     if counts {
-                        self.take(index, at + 1, Role::When);
+                        self.take(index, at + 1, Role::Time);
                         let start = range_start(from, to, within);
                         let end = clock_time(to, Some(start), None);
                         return Some((Some(start), Some(EndTime::At(end)), false));
@@ -907,7 +1005,7 @@ impl Sentence<'_> {
                     finish = Some(EndTime::At(clock_time(second, Some(start), None)));
                     end += 1 + size;
                 }
-                self.take(if lead { index } else { at }, end, Role::When);
+                self.take(if lead { index } else { at }, end, Role::Time);
                 return Some((Some(start), finish, first.midnight && finish.is_none()));
             }
         }
@@ -934,7 +1032,7 @@ impl Sentence<'_> {
             if let Some(length) =
                 short.filter(|length| days || matches!(length, Length::Minutes(_)))
             {
-                self.take(index, at + 1, Role::When);
+                self.take(index, at + 1, Role::Length);
                 return Some(length);
             }
             // "half an hour".
@@ -962,7 +1060,7 @@ impl Sentence<'_> {
                     _ => continue,
                 };
                 let nights = i64::from(unit.starts_with("night"));
-                self.take(index, at + 2, Role::When);
+                self.take(index, at + 2, Role::Length);
                 return Some(Length::Days(((n * each).round() as i64).max(1) + nights));
             } else {
                 continue;
@@ -981,7 +1079,7 @@ impl Sentence<'_> {
             if minutes <= 0.0 {
                 continue;
             }
-            self.take(index, end, Role::When);
+            self.take(index, end, Role::Length);
             return Some(Length::Minutes(minutes.round() as i64));
         }
         if days {
@@ -1012,7 +1110,7 @@ impl Sentence<'_> {
             if minutes <= 0.0 || minutes > 12.0 * 60.0 {
                 continue;
             }
-            self.take(index, index + size, Role::When);
+            self.take(index, index + size, Role::Length);
             return Some(Length::Minutes(minutes.round() as i64));
         }
         None
@@ -1030,7 +1128,8 @@ impl Sentence<'_> {
         ];
         // How many words before one like "every" there can be, besides the time.
         const LEADING: usize = 8;
-        let timed = |sentence: &Sentence, index: usize| sentence.role(index) == Some(Role::When);
+        let timed =
+            |sentence: &Sentence, index: usize| sentence.role(index).is_some_and(Role::is_when);
         let ordinal = |sentence: &Sentence, index: usize| {
             sentence.plain(index).is_some_and(|word| ORDINALS.contains(&word))
         };
@@ -1083,7 +1182,7 @@ impl Sentence<'_> {
                     if self.repeat(&said, self.context.today).is_some() {
                         for at in start..start + size {
                             if self.free(at) {
-                                self.take(at, at + 1, Role::When);
+                                self.take(at, at + 1, Role::Repeat);
                             }
                         }
                         return Some(said);
@@ -1208,9 +1307,12 @@ impl Sentence<'_> {
                     [] => continue,
                     [word] => {
                         let last = index + size == self.words.len();
+                        // With no title to be part of, as when it's only
+                        // when, any word that's a day is one.
                         let alone = DAY_WORDS.contains(&word)
                             || is_written_day(word)
-                            || self.reader.names_a_day(word);
+                            || self.reader.names_a_day(word)
+                            || !self.event;
                         let typing = last
                             && word.len() > 1
                             && DAY_WORDS.iter().any(|day| day.starts_with(word));
@@ -1252,11 +1354,19 @@ impl Sentence<'_> {
             && WEEKDAY_WORDS.iter().any(|(name, _)| Some(*name) == self.plain(0))
             && self.free(1);
         if !named {
-            self.take(from, from + size, Role::When);
+            self.take(from, from + size, Role::Day);
         }
         let day = readings[0].day;
+        // Only when, a month, a quarter, a year or a named day that
+        // lasts is all of it too, as "next month" is somewhere to look.
         let whole = self.reader.span(&said, today).filter(|span| {
-            matches!(span.kind, SpanKind::Week | SpanKind::Weekend) && span.first == day
+            let kinds = matches!(span.kind, SpanKind::Week | SpanKind::Weekend)
+                || (!self.event
+                    && matches!(
+                        span.kind,
+                        SpanKind::Month | SpanKind::Quarter | SpanKind::Year | SpanKind::Named
+                    ));
+            kinds && span.first == day
         });
         Some((
             day,
@@ -1302,7 +1412,7 @@ impl Sentence<'_> {
                 else {
                     continue;
                 };
-                self.take(if word == "whole" { from } else { index }, end, Role::When);
+                self.take(if word == "whole" { from } else { index }, end, Role::Day);
                 return Some((first, last));
             }
             if word == "rest" && next == Some("of") {
@@ -1311,7 +1421,7 @@ impl Sentence<'_> {
                 else {
                     continue;
                 };
-                self.take(from, end, Role::When);
+                self.take(from, end, Role::Day);
                 return Some((today, last));
             }
             if word == "next" {
@@ -1332,7 +1442,7 @@ impl Sentence<'_> {
                     _ => None,
                 };
                 let Some(last) = last else { continue };
-                self.take(from, index + 3, Role::When);
+                self.take(from, index + 3, Role::Day);
                 return Some((today, last));
             }
         }
@@ -1402,7 +1512,27 @@ impl Sentence<'_> {
             }
         }
         let (from, to, range) = best?;
-        self.take(from, to, Role::When);
+        self.take(from, to, Role::Day);
+        // Its times, "fri 6pm to sun 5pm", "at 6" or "2-4pm", are times,
+        // and so is "9-5" in "fri 6 nov 9-5", from one time to another.
+        for at in from..to {
+            let word = self.words[at].plain.as_str();
+            let times = dashed(word).is_some_and(|(from, to)| {
+                let side = |word, sure| side_time(&[word], sure).is_some();
+                side(from, true)
+                    || side(to, true)
+                    || (range.times.is_some() && side(from, false) && side(to, false))
+            });
+            if times || side_time(&[word], true).is_some() {
+                self.words[at].role = Role::Time;
+            } else if matches!(word, "at" | "@")
+                && at + 1 < to
+                && side_time(&[self.words[at + 1].plain.as_str()], false).is_some()
+            {
+                self.words[at].role = Role::Time;
+                self.words[at + 1].role = Role::Time;
+            }
+        }
         Some(range)
     }
 
@@ -1550,8 +1680,7 @@ impl Sentence<'_> {
             let words: Vec<&str> =
                 self.words[index + 1..end].iter().map(|word| word.text.as_str()).collect();
             let location = words.join(" ").trim_end_matches([',', ';', ':']).to_string();
-            self.take(index, index + 1, Role::When);
-            self.take(index + 1, end, Role::Place);
+            self.take(index, end, Role::Place);
             return Some(location);
         }
         None
@@ -1598,14 +1727,82 @@ fn short_length(word: &str) -> Option<Length> {
     }
 }
 
+/// What a sentence says, read as an event, or only for when it is.
+struct Heard {
+    title: String,
+    mentioned: Vec<usize>,
+    start_day: Day,
+    end_day: Day,
+    start_time: Option<Time>,
+    end_time: Option<Time>,
+    location: Option<String>,
+    repeat: Option<EventRepeat>,
+    time_zone: Option<String>,
+    read: EventRead,
+    others: Vec<Day>,
+    words: Vec<ReadWord>,
+    /// Whether every word was read as something, leaving nothing for a
+    /// title.
+    all_read: bool,
+}
+
 /// Reads an event's sentence.
 pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> EventReading {
+    let heard = hear(reader, text, context, true).expect("an event has a time to fall back on");
+    EventReading {
+        title: heard.title,
+        mentioned: heard.mentioned,
+        start_day: heard.start_day,
+        end_day: heard.end_day,
+        start_time: heard.start_time,
+        end_time: heard.end_time,
+        location: heard.location,
+        repeat: heard.repeat,
+        time_zone: heard.time_zone,
+        read: heard.read,
+        others: heard.others,
+        words: heard.words,
+    }
+}
+
+/// Reads when something is, and nothing else, as an event's sentence
+/// would say it.
+pub(crate) fn when(reader: &Reader, text: &str, today: Day) -> Option<WhenReading> {
+    let context = EventContext::new(today, Time::from_minutes(0));
+    let heard = hear(reader, text, &context, false)?;
+    heard.all_read.then_some(WhenReading {
+        start_day: heard.start_day,
+        end_day: heard.end_day,
+        start_time: heard.start_time,
+        end_time: heard.end_time,
+        time_zone: heard.time_zone,
+        others: heard.others,
+        words: heard.words,
+    })
+}
+
+/// Reads a sentence, as an event's, with everything else it says, or only
+/// for when it is: then nothing falls back on what the context says when
+/// nothing does, and with a time but nothing to say when it starts it's
+/// `None`.
+fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Option<Heard> {
     let today = context.today;
     let words = text
         .split_whitespace()
-        .map(|word| Word { text: word.to_string(), plain: plain_word(word), role: Role::Title })
+        .map(|word| {
+            // Where the word is, from where it is in memory, as it's a
+            // part of the text.
+            let start = word.as_ptr() as usize - text.as_ptr() as usize;
+            Word {
+                text: word.to_string(),
+                plain: plain_word(word),
+                role: Role::Title,
+                start,
+                end: start + word.len(),
+            }
+        })
         .collect();
-    let mut sentence = Sentence { reader, context, words };
+    let mut sentence = Sentence { reader, context, words, event };
     let mentioned = sentence.mentions();
     // The zone first, so a city in it isn't where it is, or its title.
     let time_zone = sentence.zone(&reader.zones.names);
@@ -1620,7 +1817,9 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         .find_map(|word| kind(&word.plain));
     let within = part.map(|part| part.hours).or(usual_hours);
     // A repeat reads its own days, as in "every sunday until christmas".
-    let repeating = sentence.words.iter().any(|word| REPEATS.contains(&word.plain.as_str()));
+    // Only an event repeats.
+    let repeating =
+        event && sentence.words.iter().any(|word| REPEATS.contains(&word.plain.as_str()));
     let ranged = if repeating { None } else { sentence.ranges() };
     let time = if ranged.is_some_and(|range| range.times.is_some()) {
         None
@@ -1631,19 +1830,20 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
     // for 6 weeks" is how long it goes on repeating, but after how long
     // each is in hours or minutes, as "every day for 2 hours" isn't.
     let hours = sentence.lasts(false);
-    let repeat_said = sentence.repeats();
+    let repeat_said = if event { sentence.repeats() } else { None };
     let length = hours.or_else(|| sentence.lasts(true));
     let span = if ranged.is_some() { None } else { sentence.spans() };
     let day = if ranged.is_some() || span.is_some() { None } else { sentence.days() };
-    let location = sentence.place();
+    let location = if event { sentence.place() } else { None };
 
     // What joined the title to what was read, like "on" in "on friday",
     // goes with it.
     for index in 0..sentence.words.len() {
         let joiner = sentence.free(index)
             && sentence.plain(index).is_some_and(|word| JOINERS.contains(&word));
-        if joiner && sentence.role(index + 1) == Some(Role::When) {
-            sentence.words[index].role = Role::When;
+        let next = sentence.role(index + 1).filter(|role| role.is_when());
+        if joiner && let Some(next) = next {
+            sentence.words[index].role = next;
         }
     }
     let mut title = sentence.title();
@@ -1724,7 +1924,14 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
     let repeat = repeated
         .clone()
         .map(|(repeat, how)| EventRepeat { repeat: Repeat { starts: start_day, ..repeat }, how });
-    let shared = |end_day, start_time, end_time| EventReading {
+    let words: Vec<ReadWord> = sentence
+        .words
+        .iter()
+        .map(|word| ReadWord { start: word.start, end: word.end, role: word.role })
+        .collect();
+    let all_read = !sentence.words.is_empty()
+        && sentence.words.iter().all(|word| word.role != Role::Title || word.plain.is_empty());
+    let shared = |end_day, start_time, end_time| Heard {
         title: title.clone(),
         mentioned: mentioned.clone(),
         start_day,
@@ -1736,6 +1943,8 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         time_zone: time_zone.clone(),
         read: read.clone(),
         others: others.clone(),
+        words: words.clone(),
+        all_read,
     };
 
     // A day, or a repeat, with no time is over whole days, unless it's
@@ -1747,16 +1956,18 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         let end = last_day
             .or_else(|| start_day.add_days(days_long.unwrap_or(1) - 1))
             .unwrap_or(start_day);
-        return shared(end, None, None);
+        return Some(shared(end, None, None));
     }
 
     // From one day and time to another.
     if let (Some(range), Some((from, to))) = (ranged, range_times) {
-        return shared(range.end_day, Some(from), Some(to));
+        return Some(shared(range.end_day, Some(from), Some(to)));
     }
 
-    let start_time = time.and_then(|(start, ..)| start).or(usual).unwrap_or(context.fallback_time);
-    let default_length = i64::from(context.default_length);
+    // Only an event falls back on a time, and how long it lasts.
+    let fallback_time = event.then_some(context.fallback_time);
+    let default_length = event.then_some(i64::from(context.default_length));
+    let start_time = time.and_then(|(start, ..)| start).or(usual).or(fallback_time)?;
     let end = time.and_then(|(_, end, _)| end).map(|end| end.after(start_time));
     let meal_minutes = meal_usual.map(|(_, minutes)| minutes);
     // Over days, at the times said: "6-8 nov 9-5" is from 9 on the first
@@ -1764,20 +1975,24 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
     // after it as one would on its own: "mon-fri at 9" is from 9 on Monday
     // to 10 on Friday.
     if let Some(last_day) = last_day {
-        let length = minutes_long.or(meal_minutes).unwrap_or(default_length);
-        let end = end.unwrap_or(Time::from_minutes(i64::from(start_time.minutes()) + length));
-        return shared(last_day, Some(start_time), Some(end));
+        let length = minutes_long.or(meal_minutes).or(default_length);
+        let end = end
+            .or(length.map(|length| Time::from_minutes(i64::from(start_time.minutes()) + length)));
+        return Some(shared(last_day, Some(start_time), end));
     }
     let minutes = match (days_long, minutes_long, end) {
-        (Some(days), ..) => days * 24 * 60,
-        (_, Some(minutes), _) => minutes,
+        (Some(days), ..) => Some(days * 24 * 60),
+        (_, Some(minutes), _) => Some(minutes),
         // To the next time it's that time, the next day if it's earlier.
-        (_, _, Some(end)) => {
-            (i64::from(end.minutes()) - i64::from(start_time.minutes()) - 1).rem_euclid(24 * 60) + 1
-        }
-        _ => meal_minutes.unwrap_or(default_length),
+        (_, _, Some(end)) => Some(
+            (i64::from(end.minutes()) - i64::from(start_time.minutes()) - 1).rem_euclid(24 * 60)
+                + 1,
+        ),
+        _ => meal_minutes.or(default_length),
     };
+    // At a time, and not until one.
+    let Some(minutes) = minutes else { return Some(shared(start_day, Some(start_time), None)) };
     let ends = i64::from(start_time.minutes()) + minutes;
     let end_day = start_day.add_days(ends.div_euclid(24 * 60)).unwrap_or(start_day);
-    shared(end_day, Some(start_time), Some(Time::from_minutes(ends)))
+    Some(shared(end_day, Some(start_time), Some(Time::from_minutes(ends))))
 }

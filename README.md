@@ -16,8 +16,11 @@ plain English, the way people type them into a date picker or a calendar:
 - **where something is from a day**, like a reminder from its event: "3
   days before", "the friday before", "the day before at 9am", "an hour
   before"
+- **when something is, and nothing else**: "tomorrow 2-4pm", "fri 6pm to
+  sun 5pm", "3pm for an hour", "next month"
 - **an event typed as a sentence**: "Lunch with Priya tomorrow at 1 at
-  Monmouth", "Standup every weekday at 9:30 for 15 mins"
+  Monmouth", "Standup every weekday at 9:30 for 15 mins", with which words
+  were read as what, for showing them as they're typed
 
 The last word can be half typed, numbers can be words, and a phrase that
 could mean more than one day gives each, the likeliest first.
@@ -50,6 +53,34 @@ assert_eq!(offset.to_string(), "-P1D@09:00");
 let event = Day::new(2026, 12, 3).unwrap();
 let (day, time) = reader.offset_from(&offset, event, Time::new(14, 0)).unwrap();
 assert_eq!((day.to_string(), time), ("2026-12-02".to_string(), Time::new(9, 0)));
+```
+
+An event's sentence says which word was read as what, and when it is
+reads the same way on its own, as for a search or finding a free slot:
+
+```rust
+use say_when::{Day, EventContext, Options, Reader, Time, WordRole};
+
+let reader = Reader::new(Options::default());
+let today = Day::new(2026, 11, 16).unwrap();
+
+let text = "Lunch tomorrow 1-2pm at Dishoom";
+let event = reader.event(text, &EventContext::new(today, Time::new(9, 0).unwrap()));
+assert_eq!(event.title, "Lunch");
+let said: Vec<(&str, WordRole)> =
+    event.words.iter().map(|word| (&text[word.start..word.end], word.role)).collect();
+assert_eq!(said, [
+    ("Lunch", WordRole::Title),
+    ("tomorrow", WordRole::Day),
+    ("1-2pm", WordRole::Time),
+    ("at", WordRole::Place),
+    ("Dishoom", WordRole::Place),
+]);
+
+let when = reader.when("fri 6pm to sun 5pm", today).unwrap();
+assert_eq!((when.start_day.to_string(), when.start_time), ("2026-11-20".to_string(), Time::new(18, 0)));
+assert_eq!((when.end_day.to_string(), when.end_time), ("2026-11-22".to_string(), Time::new(17, 0)));
+assert!(reader.when("lunch tomorrow", today).is_none());
 ```
 
 `cargo run --example read -- "next friday"` tries a phrase.
@@ -120,7 +151,9 @@ says what was meant (`days`: a day, a span, a day picked out of a span, a
 day moved by so much), and the tree is worked out for the day it is. A
 repeat is a body and its tails (`repeat`), over rules that are worked out
 by `rule`. An event's sentence (`event`) starts as all title, and one pass
-after another takes the words it reads as something else.
+after another takes the words it reads as something else. When something
+is, read on its own, goes through the same passes, leaving out the ones
+for how it repeats and where it is, and is nothing if any word is left.
 
 With the `serde` feature, what's read can be written out and options read
 in.

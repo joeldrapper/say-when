@@ -13,6 +13,7 @@ public holidays, and the time an event is at when nothing says.
 | `events.jsonl`  | `Reader::event`, with `mentions` when it has any     |
 | `clocks.jsonl`  | `read_clock`, after the time `after` when it has one |
 | `offsets.jsonl` | `Reader::offset`, landed from 2pm on Mon 16 Nov 2026 |
+| `when.jsonl`    | `Reader::when`, on `today`                           |
 
 A case is read for its `locale`, or the UK, with the public holidays of
 its `region` as its days off, from the fixture's `calendars`: the bank

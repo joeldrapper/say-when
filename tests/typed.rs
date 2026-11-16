@@ -3,8 +3,8 @@
 //! what joins them, put together at random, thousands of times over.
 
 use say_when::{
-    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDay, Offset, Options, Reader, Time,
-    read_clock,
+    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDay, Offset, Options, ReadWord,
+    Reader, Time, WordRole, read_clock,
 };
 
 const WORDS: [&str; 68] = [
@@ -166,6 +166,21 @@ fn nothing_typed_panics_or_leaves_the_calendar() {
         };
         let event = reader.event(&text, &context);
         assert!(event.start_day <= event.end_day, "{text:?}: {event:?}");
+        // Each word is a piece of the text, in order.
+        let pieces = |words: &[ReadWord]| {
+            let mut last = 0;
+            for word in words {
+                assert!(last <= word.start && word.start < word.end, "{text:?}: {words:?}");
+                assert!(!text[word.start..word.end].trim().is_empty(), "{text:?}: {words:?}");
+                last = word.end;
+            }
+        };
+        pieces(&event.words);
+        if let Some(when) = reader.when(&text, today) {
+            assert!(when.start_day <= when.end_day, "{text:?}: {when:?}");
+            assert!(when.words.iter().all(|word| word.role != WordRole::Title), "{text:?}");
+            pieces(&when.words);
+        }
         if let Some(offset) = reader.offset(&text) {
             assert_eq!(offset.to_string().parse::<Offset>(), Ok(offset), "{text:?}");
             offset.describe();

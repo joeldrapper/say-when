@@ -19,7 +19,10 @@ pub use calendar::{Calendar, DayOff, NamedDay};
 pub use clock::read_clock;
 pub use day::{Day, ParseError, Time, Weekday, days_in_month, is_leap_year};
 pub use days::SpanKind;
-pub use event::{EventContext, EventRead, EventReading, EventRepeat, Meal, Mention};
+pub use event::{
+    EventContext, EventRead, EventReading, EventRepeat, Meal, Mention, ReadWord, WhenReading,
+    WordRole,
+};
 pub use locale::Locale;
 pub use named::easter;
 pub use offset::{Offset, OffsetUnit, Shift};
@@ -351,6 +354,16 @@ impl Reader {
     /// is, who's mentioned, and the title that's left.
     pub fn event(&self, text: &str, context: &EventContext) -> EventReading {
         event::read(self, text, context)
+    }
+
+    /// When something is, typed with nothing else, like "tomorrow 2-4pm",
+    /// "fri 6pm to sun 5pm", "next week" or "3pm for an hour": the days and
+    /// times an event's sentence would say, read the same way. Only what's
+    /// said: "at 3" is at 3, and not until any time. `None` when anything
+    /// typed isn't when, like "lunch tomorrow", or it says nothing of
+    /// when it starts, like "for 2 hours".
+    pub fn when(&self, text: &str, today: Day) -> Option<WhenReading> {
+        event::when(self, text, today)
     }
 
     /// The days what's typed in a date picker's search might mean, the

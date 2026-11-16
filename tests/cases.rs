@@ -174,6 +174,56 @@ fn events() {
 }
 
 #[test]
+fn when() {
+    run("when", |case, said, reader, _| json!(reader.when(said, day(case, "today"))));
+}
+
+/// When something is, read on its own, is when an event's sentence of it
+/// says it is: every event case that's only when, and so has no title.
+#[test]
+fn when_is_as_an_event_says() {
+    let fixture = fixture();
+    let text = std::fs::read_to_string(directory().join("events.jsonl")).unwrap();
+    let mut checked = 0;
+    let mut readers: HashMap<String, Reader> = HashMap::new();
+    for line in text.lines() {
+        let case: Value = serde_json::from_str(line).unwrap();
+        if case.get("mentions").is_some() {
+            continue;
+        }
+        let said = case["text"].as_str().unwrap();
+        let key = format!("{} {} {}", case["locale"], case["region"], case["about"]);
+        let reader = readers.entry(key).or_insert_with(|| reader(&case, &fixture));
+        let today = day(&case, "today");
+        let Some(when) = reader.when(said, today) else { continue };
+        let event = reader.event(said, &EventContext::new(today, fixture.fallback_time));
+        // Only an event whose every word was read, as a word like "may" is
+        // only a month when nothing else is said.
+        if !event.title.is_empty() {
+            continue;
+        }
+        checked += 1;
+        assert_eq!(
+            (when.start_day, when.start_time),
+            (event.start_day, event.start_time),
+            "{said}"
+        );
+        assert_eq!(when.words, event.words, "{said}");
+        assert_eq!(when.time_zone, event.time_zone, "{said}");
+        if when.end_time.is_some() {
+            assert_eq!((when.end_day, when.end_time), (event.end_day, event.end_time), "{said}");
+        }
+        // Over whole days to the same day, or to the end of the span said,
+        // like "next month", which an event starts on.
+        if when.is_all_day() && when.end_day != event.end_day {
+            let span = reader.span(said, today).map(|span| (span.first, span.last));
+            assert_eq!(span, Some((when.start_day, when.end_day)), "{said}");
+        }
+    }
+    assert!(checked > 100, "only {checked} event cases are only when");
+}
+
+#[test]
 fn offsets() {
     run("offsets", |_, said, reader, _| {
         // Landed from a Monday at 2pm, and from the same day with no time.
