@@ -1,19 +1,40 @@
-# say-when reads days, spans of days, times and how things repeat, written
-# in plain English. say-when-holidays works out public holidays by rule, as
-# calendars for it. Each is a crate with a version of its own.
-[workspace]
-resolver = "3"
-members = ["say-when", "say-when-holidays"]
-
-[workspace.package]
+[package]
+name = "say-when"
+version = "0.1.0"
+description = "Reads days, ranges of days, times and how things repeat, written in plain English"
 edition = "2024"
 rust-version = "1.90"
 license = "MIT"
 repository = "https://github.com/joeldrapper/say-when"
+documentation = "https://docs.rs/say-when"
+readme = "README.md"
+keywords = ["date", "parser", "natural-language", "recurrence", "rrule"]
+categories = ["date-and-time", "parser-implementations"]
 
-[workspace.lints.rust]
+[features]
+# Lets what's read be written out, and options read in, with serde.
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The cases, and the timing of them, read their fixture with serde, so
+# they're built when the feature's on. Everything else is built without.
+[[test]]
+name = "cases"
+required-features = ["serde"]
+
+[[example]]
+name = "bench"
+required-features = ["serde"]
+
+[lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "warn", priority = -1 }

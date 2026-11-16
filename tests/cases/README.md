@@ -14,11 +14,11 @@ public holidays, and the time an event is at when nothing says.
 | `clocks.jsonl`  | `read_clock`, after the time `after` when it has one |
 
 A case is read for its `locale`, or the UK, with the public holidays of
-its `region` as its calendar, from the fixture's `calendars`, which are
-what `say-when-holidays` works out for 2015 to 2045 (`cargo run -p
-say-when-holidays --example calendars`). A UK case with no region has
-England and Wales's, and a case for anywhere else with no region has no
-calendar. The cases with a locale didn't come from the TypeScript, which
+its `region` as its calendar, from the fixture's `calendars`: the bank
+holidays of England and Wales, Scotland and Northern Ireland, and the
+federal holidays of the United States, for 2015 to 2045. A UK case with
+no region has England and Wales's, and a case for anywhere else with no
+region has no calendar. The cases with a locale didn't come from the TypeScript, which
 read British English only: each was read through by hand when it was
 added.
 

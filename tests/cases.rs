@@ -21,7 +21,7 @@ use std::path::PathBuf;
 struct Fixture {
     named: Vec<NamedDate>,
     zones: ZoneNames,
-    /// Each region's public holidays, as `say-when-holidays` works them out.
+    /// Each region's public holidays, for the years the cases are read in.
     calendars: HashMap<String, Vec<DayOff>>,
     fallback_time: Time,
 }

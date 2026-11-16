@@ -22,15 +22,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features --locked
-      - run: cargo doc --workspace --no-deps --all-features --locked
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features --locked
+      - run: cargo doc --no-deps --all-features --locked
 
   test:
-    # Each crate by itself, with none of its features and then with all of
-    # them: a crate that builds only beside the others, or only with a
-    # feature another switched on, passes when the workspace is tested at
-    # once.
+    # With none of its features and then with all of them, so what needs
+    # serde says so.
     name: Test (${{ matrix.rust }})
     runs-on: ubuntu-latest
     strategy:
@@ -43,11 +41,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-      - run: |
-          for crate in say-when say-when-holidays; do
-            cargo test --package "$crate" --locked
-            cargo test --package "$crate" --all-features --locked
-          done
+      - run: cargo test --locked
+      - run: cargo test --all-features --locked
 
   wasm:
     name: WebAssembly
@@ -57,7 +52,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo build --workspace --all-features --target wasm32-unknown-unknown --locked
+      - run: cargo build --all-features --target wasm32-unknown-unknown --locked
 
   package:
     name: Package
@@ -65,4 +60,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo package --workspace --locked
+      - run: cargo package --locked
