@@ -577,6 +577,26 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+        // "the fourth day after christmas", "the 3rd working day before
+        // it": counted as "4 days after", since the first day after is the
+        // day after. Days only: "the second week after easter" is a week.
+        if let Some(Token::Ordinal(nth @ 2..)) = self.tokens.get(at)
+            && let Ok(count) = i64::try_from(*nth)
+        {
+            for (unit, times, end) in self.unit(at + 1) {
+                let days = matches!(unit, Unit::Day | Unit::WorkingDay | Unit::Weekday);
+                if times != 1 || !days || !self.is(end, &["before", "after", "from"]) {
+                    continue;
+                }
+                let before = self.is(end, &["before"]);
+                for (base, end) in self.day(end + 1, depth + 1) {
+                    found.push((
+                        DayExpr::Moved { count, unit, the: false, before, base: Box::new(base) },
+                        end,
+                    ));
+                }
+            }
+        }
         if self.is(at, &["in"]) && self.number(at + 1).is_some() {
             found.extend(self.day(at + 1, depth + 1));
         }

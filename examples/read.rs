@@ -36,4 +36,7 @@ fn main() {
         event.end_time.map(|time| time.to_string()).unwrap_or_default(),
         event.location.map(|place| format!(" at {place}")).unwrap_or_default(),
     );
+    if let Some(repeat) = event.repeat {
+        println!("  repeating: {} ({})", repeat.how, repeat.repeat.rule);
+    }
 }

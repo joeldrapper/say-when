@@ -332,16 +332,30 @@ const DAY_WORDS: [&str; 26] = [
 /// Words that are part of a day, but say nothing on their own.
 const FILLERS: [&str; 5] = ["on", "the", "this", "next", "by"];
 /// Words that start saying how it repeats.
-const REPEATS: [&str; 19] = [
+const REPEATS: [&str; 33] = [
     "every",
     "each",
+    "alternate",
     "daily",
+    "nightly",
     "weekly",
     "fortnightly",
+    "biweekly",
     "monthly",
+    "bimonthly",
     "quarterly",
+    "biannually",
+    "biannual",
+    "semiannually",
+    "semiannual",
+    "half-yearly",
+    "six-monthly",
     "yearly",
     "annually",
+    "biennially",
+    "biennial",
+    "triennially",
+    "triennial",
     "weekdays",
     "weekends",
     "workdays",
@@ -353,6 +367,19 @@ const REPEATS: [&str; 19] = [
     "saturdays",
     "sundays",
 ];
+/// Whether the words from a place start to say how something repeats: one
+/// of the words that always do, or "once" or "half" with the word that
+/// makes them, as in "once a week" and "half yearly", since "once" and
+/// "half" are said for much else, as in "half three".
+fn says_repeat(words: &[&str]) -> bool {
+    match words {
+        [word, ..] if REPEATS.contains(word) => true,
+        ["once", next, ..] => matches!(*next, "a" | "an" | "per" | "every" | "each"),
+        ["half", "yearly", ..] => true,
+        _ => false,
+    }
+}
+
 /// Words left behind by what was read after them, like "on" in "on friday".
 const JOINERS: [&str; 9] =
     ["on", "at", "from", "between", "starting", "by", "for", "over", "during"];
@@ -1138,7 +1165,7 @@ impl Sentence<'_> {
             sentence.plain(index).is_some_and(|word| ORDINALS.contains(&word))
         };
         for index in 0..self.words.len() {
-            if !self.free(index) || !self.plain(index).is_some_and(|word| REPEATS.contains(&word)) {
+            if !self.free(index) || !says_repeat(&self.plains()[index..]) {
                 continue;
             }
             // Past the time, as in "last friday at 9 every month".
@@ -1844,8 +1871,8 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
     let within = part.map(|part| part.hours).or(usual_hours);
     // A repeat reads its own days, as in "every sunday until christmas".
     // Only an event repeats.
-    let repeating =
-        event && sentence.words.iter().any(|word| REPEATS.contains(&word.plain.as_str()));
+    let plains = sentence.plains();
+    let repeating = event && (0..plains.len()).any(|at| says_repeat(&plains[at..]));
     let ranged = if repeating { None } else { sentence.ranges() };
     let time = if ranged.is_some_and(|range| range.times.is_some()) {
         None

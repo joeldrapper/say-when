@@ -1935,3 +1935,7 @@
 {"locale":"canada","out":{"corrected":null,"days":[{"about":null,"day":"2027-10-11","name":null}]},"text":"thanksgiving","today":"2026-10-20"}
 {"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-24","name":null}]},"text":"the last working day before chr","today":"2026-11-16"}
 {"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-18","name":null}]},"text":"last fri before christmas","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-29","name":null}]},"text":"the fourth day after christmas","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-29","name":null}]},"text":"the fourth day after chr","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[]},"text":"the fourth day aft","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-22","name":null}]},"text":"the 3rd working day before christ","today":"2026-11-16"}

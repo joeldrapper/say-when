@@ -16300,3 +16300,20 @@
 {"out":{"days":[{"about":null,"day":"2027-01-04","how":"the working day after Fri 1 Jan 2027, New Year’s Day"}],"span":null},"text":"the first working day after new year's day","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2026-12-24","how":"the working day before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final working day before christmas","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2026-12-18","how":"the Friday before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final friday before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the fourth day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the 4th day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"fourth day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-27","how":"2 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the second day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-15","how":"10 days before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the tenth day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-22","how":"3 working days before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the third working day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-30","how":"3 weekdays after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the 3rd weekday after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-02","how":"5 days after Fri 27 Nov"},{"about":null,"day":"2026-11-25","how":"5 days after Fri 20 Nov"}],"span":null},"text":"the fifth day after next friday","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-01-15","how":"21 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the twenty-first day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the fourth day from christmas","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"the second week after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-04","how":"the 4th day of December 2026"}],"span":null},"text":"the fourth day","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"the fourth day after","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the fourth day after chr","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-11-20","how":"in 4 days"}],"span":null},"text":"in four days' time","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-11-20","how":"in 4 days"}],"span":null},"text":"in 4 days time","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"four days after christmas","today":"2026-11-16"}
