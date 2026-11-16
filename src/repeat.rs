@@ -357,6 +357,13 @@ impl RepeatParser<'_> {
         {
             let nth = nth as i32;
             for weekdays in self.weekdays(end) {
+                // Not "the 3rd weekend": a position picks one day, the 3rd
+                // weekend day (though "the 1st working day" is one, when
+                // the working week is Saturday and Sunday), and no rule picks a whole weekend each
+                // month, as "the 3rd saturday and sunday" can be in two.
+                if !weekdays.working && weekdays.days == [Weekday::Saturday, Weekday::Sunday] {
+                    continue;
+                }
                 let days = match weekdays.days[..] {
                     [weekday] => MonthDays::Nth(ByDay { weekday, nth }),
                     _ => MonthDays::Position {

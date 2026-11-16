@@ -143,6 +143,20 @@ fn works_the_days_the_calendar_does() {
 }
 
 #[test]
+fn a_weekend_working_week_has_a_first_working_day() {
+    use say_when::{Calendar, Weekday};
+    let calendar =
+        Calendar { working_week: vec![Weekday::Saturday, Weekday::Sunday], ..Calendar::default() };
+    let reader = Reader::new(Options::default()).with_calendar(calendar);
+    let today = day("2026-10-28");
+    let first = &reader.repeats("the first working day of every month", today, today)[0];
+    assert_eq!(first.next[..2], [day("2026-11-01"), day("2026-12-05")]);
+    assert_eq!(first.how, "Every month on the 1st working day");
+    // Though a weekend picked out of a month is no rule.
+    assert!(reader.repeats("the first weekend of every month", today, today).is_empty());
+}
+
+#[test]
 fn looks_past_days_off_however_many_there_are() {
     use say_when::{Calendar, DayOff};
     let days_off = (6..=20).map(|n| DayOff::new(Day::new(2026, 1, n).unwrap(), None)).collect();
