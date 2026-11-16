@@ -16317,3 +16317,29 @@
 {"out":{"days":[{"about":null,"day":"2026-11-20","how":"in 4 days"}],"span":null},"text":"in four days' time","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2026-11-20","how":"in 4 days"}],"span":null},"text":"in 4 days time","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2026-12-29","how":"4 days after Fri 25 Dec, Christmas Day"}],"span":null},"text":"four days after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":"Christmas Day"}],"span":null},"text":"christmas 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":"Christmas Day"}],"span":null},"text":"christmas '28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":"Christmas Day"}],"span":null},"text":"christmas day 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-12-26","how":"Boxing Day"}],"span":null},"text":"boxing day 27","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2029-12-31","how":"New Year’s Eve"}],"span":null},"text":"new year's eve 29","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-02-14","how":"Valentine’s Day"}],"span":null},"text":"valentine's day 27","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-03-28","how":"Easter Sunday"}],"span":null},"text":"easter 27","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-04-16","how":"Easter Sunday"}],"span":null},"text":"easter sunday 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-03-26","how":"Good Friday"}],"span":null},"text":"good friday 27","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2029-03-11","how":"Mother’s Day"}],"span":null},"text":"mother's day 29","today":"2026-11-16"}
+{"out":{"days":[{"about":"Eli Jones’s birthday","day":"2028-03-14","how":null}],"span":null},"text":"mum's birthday 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-05-01","how":"Early May bank holiday"}],"span":null},"text":"the may bank holiday 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-01-03","how":"New Year’s Day (substitute day)"}],"span":null},"text":"the next bank holiday 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-02-15","how":"Half term"}],"span":{"first":"2027-02-15","kind":"named","last":"2027-02-19"}},"text":"half term 27","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":null}],"span":null},"text":"25 dec 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":null}],"span":null},"text":"dec 25 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":null}],"span":null},"text":"dec 25, '28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-25","how":"Christmas Day"}],"span":null},"text":"christmas 2028","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"christmas 24","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"christmas 10","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"christmas 280","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-28","how":null}],"span":null},"text":"dec 28","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2028-12-26","how":"the day after Mon 25 Dec 2028, Christmas Day"}],"span":null},"text":"the day after christmas 28","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"christmas 28 to new year's day 29","today":"2026-11-16"}
+{"out":{"days":[],"span":null},"text":"christmas 2","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-25","how":"Christmas Day"}],"span":null},"text":"chris","today":"2026-11-16"}

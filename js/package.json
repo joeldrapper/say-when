@@ -1,6 +1,6 @@
 {
 	"name": "@milieu/say-when",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Reads days, ranges of days, times and how things repeat, written in plain English",
 	"keywords": [
 		"date",

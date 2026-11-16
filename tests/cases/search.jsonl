@@ -1939,3 +1939,7 @@
 {"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-29","name":null}]},"text":"the fourth day after chr","today":"2026-11-16"}
 {"out":{"corrected":null,"days":[]},"text":"the fourth day aft","today":"2026-11-16"}
 {"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-22","name":null}]},"text":"the 3rd working day before christ","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2028-12-25","name":null}]},"text":"christmas 28","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[]},"text":"christmas 2","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2027-03-28","name":null}]},"text":"easter 27","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[]},"text":"boxing day 2","today":"2026-11-16"}
