@@ -203,9 +203,12 @@ impl Day {
         Day(self.0 + (days_in_month(year, month) - day) as i32)
     }
 
-    /// The Monday of the week it's in, as weeks run Monday to Sunday.
-    pub fn week_start(self) -> Option<Day> {
-        self.add_days(-i64::from(self.weekday().from_monday()))
+    /// The first day of the week it's in, for weeks that start on a day
+    /// of the week: `Weekday::Monday`, as iCalendar's weeks do, or
+    /// [`Locale::week_start`](crate::Locale::week_start) for weeks as
+    /// they run somewhere.
+    pub fn week_start(self, first: Weekday) -> Option<Day> {
+        self.previous(first)
     }
 
     /// The next of a day of the week, on this day or after it.
@@ -241,6 +244,36 @@ impl Day {
 }
 
 /// Written `YYYY-MM-DD`.
+/// What was written isn't a day, a time or a rule this reads.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ParseError(pub(crate) &'static str);
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+impl std::str::FromStr for Day {
+    type Err = ParseError;
+
+    /// A day written `YYYY-MM-DD`.
+    fn from_str(text: &str) -> Result<Day, ParseError> {
+        Day::parse(text).ok_or(ParseError("not a day written YYYY-MM-DD"))
+    }
+}
+
+impl std::str::FromStr for Time {
+    type Err = ParseError;
+
+    /// A time written `HH:MM`.
+    fn from_str(text: &str) -> Result<Time, ParseError> {
+        Time::parse(text).ok_or(ParseError("not a time written HH:MM"))
+    }
+}
+
 impl fmt::Display for Day {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (year, month, day) = self.ymd();
@@ -415,7 +448,8 @@ mod tests {
         assert_eq!(tuesday.next_after(Weekday::Tuesday), Some(day("2026-10-27")));
         assert_eq!(tuesday.previous(Weekday::Friday), Some(day("2026-10-16")));
         assert_eq!(tuesday.previous_before(Weekday::Tuesday), Some(day("2026-10-13")));
-        assert_eq!(tuesday.week_start(), Some(day("2026-10-19")));
+        assert_eq!(tuesday.week_start(Weekday::Monday), Some(day("2026-10-19")));
+        assert_eq!(tuesday.week_start(Weekday::Sunday), Some(day("2026-10-18")));
         assert_eq!(tuesday.month_start(), day("2026-10-01"));
         assert_eq!(tuesday.month_end(), day("2026-10-31"));
         assert_eq!(tuesday.days_until(day("2026-12-25")), 66);

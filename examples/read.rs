@@ -20,18 +20,12 @@ fn main() {
 
     println!("On {today}, {text:?} reads as");
     for reading in reader.days(&text, today) {
-        println!("  the day {} {}", reading.day, reading.how);
+        println!("  the day {} {}", reading.day, reading.how.unwrap_or_default());
     }
     for reading in reader.repeats(&text, today, today) {
         println!("  repeating: {} ({}), next {:?}", reading.how, reading.repeat.rule, reading.next);
     }
-    let context = EventContext {
-        today,
-        fallback_day: today,
-        fallback_time: Time::new(9, 0).expect("a real time"),
-        mentions: &[],
-        only_title: false,
-    };
+    let context = EventContext::new(today, Time::new(9, 0).expect("a real time"));
     let event = reader.event(&text, &context);
     println!(
         "  the event {:?} from {} {} to {} {}{}",
@@ -40,6 +34,6 @@ fn main() {
         event.start_time.map(|time| time.to_string()).unwrap_or_default(),
         event.end_day,
         event.end_time.map(|time| time.to_string()).unwrap_or_default(),
-        if event.location.is_empty() { String::new() } else { format!(" at {}", event.location) },
+        event.location.map(|place| format!(" at {place}")).unwrap_or_default(),
     );
 }

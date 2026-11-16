@@ -8,8 +8,8 @@
 //! cargo test -p say-when --features serde --test cases` and read the diff.
 
 use say_when::{
-    Calendar, Day, DayOff, EventContext, Locale, NamedDate, Options, Reader, Time, ZoneNames,
-    read_clock,
+    Calendar, Day, DayOff, EventContext, Locale, Mention, NamedDate, Options, Reader, Time,
+    ZoneNames, read_clock,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -17,7 +17,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Fixture {
     named: Vec<NamedDate>,
     zones: ZoneNames,
@@ -45,7 +44,7 @@ fn reader(case: &Value, fixture: &Fixture) -> Reader {
     };
     let region = case["region"].as_str().or((locale == Locale::Uk).then_some("england-and-wales"));
     let mut reader = Reader::new(Options::new(locale))
-        .with_named_dates(&fixture.named)
+        .with_named_dates(fixture.named.clone())
         .with_zones(fixture.zones.clone());
     if let Some(region) = region {
         let days_off =
@@ -132,17 +131,17 @@ fn repeats() {
 fn events() {
     run("events", |case, said, reader, fixture| {
         let today = day(case, "today");
-        let mentions: Vec<&str> = case["mentions"]
+        // Each written after a "#", and said without it.
+        let mentions = case["mentions"]
             .as_array()
-            .map(|all| all.iter().filter_map(Value::as_str).collect())
+            .map(|all| {
+                all.iter()
+                    .filter_map(Value::as_str)
+                    .map(|m| Mention::new(format!("#{m}"), m))
+                    .collect()
+            })
             .unwrap_or_default();
-        let context = EventContext {
-            today,
-            fallback_day: today,
-            fallback_time: fixture.fallback_time,
-            mentions: &mentions,
-            only_title: false,
-        };
+        let context = EventContext { mentions, ..EventContext::new(today, fixture.fallback_time) };
         json!(reader.event(said, &context))
     });
 }

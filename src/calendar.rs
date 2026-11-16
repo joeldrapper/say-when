@@ -31,8 +31,8 @@ pub struct DayOff {
 /// The days that aren't worked: some days of the week, and the days off a
 /// caller knows of.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct Calendar {
     /// The days off, in any order. Days it doesn't cover, like those of
     /// years it has nothing for, count as worked when their weekday is.

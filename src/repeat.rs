@@ -113,7 +113,7 @@ impl MonthDays {
             MonthDays::Position { days, position, working } => {
                 rule.by_day = days.iter().copied().map(ByDay::every).collect();
                 rule.by_set_pos = Some(*position);
-                rule.skips_bank_holidays = *working;
+                rule.skips_days_off = *working;
             }
         }
         rule
@@ -363,7 +363,7 @@ impl RepeatParser<'_> {
             for days in self.weekday_list(days_at) {
                 let rule = Rule {
                     by_day: days.days.iter().copied().map(ByDay::every).collect(),
-                    skips_bank_holidays: days.working,
+                    skips_days_off: days.working,
                     ..weekly.clone()
                 };
                 found.push(schedule(rule, days.at));
@@ -389,7 +389,7 @@ impl RepeatParser<'_> {
                     for days in self.weekday_list(end) {
                         let rule = Rule {
                             by_day: days.days.iter().copied().map(ByDay::every).collect(),
-                            skips_bank_holidays: days.working,
+                            skips_days_off: days.working,
                             ..base.clone()
                         };
                         found.push(schedule(rule, days.at));
@@ -595,7 +595,7 @@ impl RepeatParser<'_> {
                     && tail.starts.is_none()
                 {
                     let later = starts
-                        .week_start()
+                        .week_start(Weekday::Monday)
                         .and_then(|monday| monday.add_days(7))
                         .and_then(|next| rule.first_day(next, calendar))
                         .filter(|later| rule.until.is_none_or(|until| *later <= until));

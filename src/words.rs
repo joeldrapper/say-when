@@ -199,7 +199,7 @@ pub(crate) fn tokens_of(pieces: &[&str]) -> Vec<(Token, usize)> {
 
 /// A name as the words a phrase would have, or `None` if it has anything a
 /// phrase's name can't, like a number.
-pub fn name_words(name: &str) -> Option<Vec<String>> {
+pub(crate) fn name_words(name: &str) -> Option<Vec<String>> {
     let found = tokens(name);
     if found.is_empty() {
         return None;

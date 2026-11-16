@@ -7,9 +7,11 @@
 //! can read it. Only the shapes people make are read: weekdays every week,
 //! days or weekdays of the month, and a month of the year.
 //!
-//! One part isn't iCalendar's: `X-BANK-HOLIDAYS=SKIP`, for which bank
-//! holidays don't count, so "the last working day of the month" is the
-//! last weekday that isn't one.
+//! One part isn't iCalendar's: `X-SKIP-DAYS-OFF=TRUE`, for which the days
+//! off in the reader's calendar don't count, so "the last working day of
+//! the month" is the last weekday that isn't one. Calendar apps ignore
+//! it, as RFC 5545 says to, and show the last weekday. It's also read as
+//! `X-BANK-HOLIDAYS=SKIP`, the name it had first.
 //!
 //! Things repeat at most once a day, so each time one comes round is known
 //! by its day.
@@ -22,6 +24,7 @@ use core::fmt;
 
 /// How often a rule comes round.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Frequency {
     Daily,
@@ -69,8 +72,10 @@ impl ByDay {
     }
 }
 
-/// A rule for when something repeats.
+/// A rule for when something repeats. Make one with [`Rule::every`] or
+/// [`Rule::parse`], and set what else it says.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[non_exhaustive]
 pub struct Rule {
     /// How often.
     pub frequency: Frequency,
@@ -89,8 +94,9 @@ pub struct Rule {
     /// Which of the days the rest pick out in a month it's on, like -1 for
     /// the last weekday.
     pub by_set_pos: Option<i32>,
-    /// Whether bank holidays don't count.
-    pub skips_bank_holidays: bool,
+    /// Whether the days off in the reader's calendar don't count, as for
+    /// "the last working day of the month".
+    pub skips_days_off: bool,
 }
 
 impl Rule {
@@ -105,7 +111,7 @@ impl Rule {
             by_month_day: Vec::new(),
             by_month: None,
             by_set_pos: None,
-            skips_bank_holidays: false,
+            skips_days_off: false,
         }
     }
 
@@ -175,7 +181,9 @@ impl Rule {
                     rule.by_set_pos = Some(whole(&value).filter(|n| *n != 0 && n.abs() <= 31)?)
                 }
                 "WKST" if value == "MO" => {}
-                "X-BANK-HOLIDAYS" if value == "SKIP" => rule.skips_bank_holidays = true,
+                // The name it was first written with, still read.
+                "X-BANK-HOLIDAYS" if value == "SKIP" => rule.skips_days_off = true,
+                "X-SKIP-DAYS-OFF" if value == "TRUE" => rule.skips_days_off = true,
                 _ => return None,
             }
         }
@@ -208,7 +216,7 @@ impl Rule {
     }
 
     fn counts(&self, day: Day, calendar: &Working) -> bool {
-        !self.skips_bank_holidays || calendar.is_working_day(day)
+        !self.skips_days_off || calendar.is_working_day(day)
     }
 
     /// The days of a month a monthly or yearly rule is on, in order.
@@ -265,7 +273,7 @@ impl Rule {
                 if self.counts(day, calendar) { vec![day] } else { Vec::new() }
             }
             Frequency::Weekly => {
-                let monday = start.week_start()?.add_days(step.checked_mul(7)?)?;
+                let monday = start.week_start(Weekday::Monday)?.add_days(step.checked_mul(7)?)?;
                 let mut offsets: Vec<i32> = if self.by_day.is_empty() {
                     vec![start.weekday().from_monday()]
                 } else {
@@ -299,10 +307,12 @@ impl Rule {
     fn periods_to(&self, start: Day, to: Day) -> i64 {
         let periods = match self.frequency {
             Frequency::Daily => start.days_until(to),
-            Frequency::Weekly => match (start.week_start(), to.week_start()) {
-                (Some(from), Some(to)) => from.days_until(to) / 7,
-                _ => 0,
-            },
+            Frequency::Weekly => {
+                match (start.week_start(Weekday::Monday), to.week_start(Weekday::Monday)) {
+                    (Some(from), Some(to)) => from.days_until(to) / 7,
+                    _ => 0,
+                }
+            }
             Frequency::Monthly => {
                 i64::from(to.year() - start.year()) * 12 + i64::from(to.month())
                     - i64::from(start.month())
@@ -379,7 +389,7 @@ impl Rule {
         if !self.by_day.is_empty() {
             if let Some(position) = self.by_set_pos {
                 let kind = if same_days(&self.by_day, &WORKING) {
-                    if self.skips_bank_holidays { "working day" } else { "weekday" }.to_string()
+                    if self.skips_days_off { "working day" } else { "weekday" }.to_string()
                 } else {
                     list(self.by_day.iter().map(|each| each.weekday.name().to_string()).collect())
                 };
@@ -419,7 +429,7 @@ impl Rule {
         };
         let units = if self.interval == 1 { unit.to_string() } else { format!("{unit}s") };
         let said = match self.frequency {
-            Frequency::Daily if self.interval == 1 && self.skips_bank_holidays => {
+            Frequency::Daily if self.interval == 1 && self.skips_days_off => {
                 "Every day but bank holidays".to_string()
             }
             Frequency::Daily => format!("{every} {units}"),
@@ -427,7 +437,7 @@ impl Rule {
                 let own = [ByDay::every(starts.weekday())];
                 let weekdays = if self.by_day.is_empty() { &own[..] } else { &self.by_day[..] };
                 let kind = if same_days(weekdays, &WORKING) {
-                    Some(if self.skips_bank_holidays { "working day" } else { "weekday" })
+                    Some(if self.skips_days_off { "working day" } else { "weekday" })
                 } else if same_days(weekdays, &[Weekday::Saturday, Weekday::Sunday]) {
                     Some("weekend")
                 } else {
@@ -539,6 +549,15 @@ fn until(text: &str) -> Option<Day> {
 }
 
 /// Written as an RRULE, in the order calendar apps write them.
+impl std::str::FromStr for Rule {
+    type Err = crate::day::ParseError;
+
+    /// A rule written as an RRULE, as [`Rule::parse`] reads it.
+    fn from_str(text: &str) -> Result<Rule, Self::Err> {
+        Rule::parse(text).ok_or(crate::day::ParseError("not a rule this can work out the days of"))
+    }
+}
+
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FREQ={}", self.frequency.code())?;
@@ -573,8 +592,8 @@ impl fmt::Display for Rule {
         if let Some(count) = self.count {
             write!(f, ";COUNT={count}")?;
         }
-        if self.skips_bank_holidays {
-            write!(f, ";X-BANK-HOLIDAYS=SKIP")?;
+        if self.skips_days_off {
+            write!(f, ";X-SKIP-DAYS-OFF=TRUE")?;
         }
         Ok(())
     }
@@ -604,7 +623,7 @@ mod tests {
             "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH",
             "FREQ=MONTHLY;BYMONTHDAY=1,15",
             "FREQ=MONTHLY;BYDAY=-1FR",
-            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-BANK-HOLIDAYS=SKIP",
+            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-SKIP-DAYS-OFF=TRUE",
             "FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=9;UNTIL=20301209",
             "FREQ=WEEKLY;BYDAY=WE;COUNT=10",
         ] {
@@ -613,6 +632,13 @@ mod tests {
         assert_eq!(
             Rule::parse("rrule:freq=daily;interval=3").unwrap().to_string(),
             "FREQ=DAILY;INTERVAL=3"
+        );
+        // As it was first written.
+        assert_eq!(
+            Rule::parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-BANK-HOLIDAYS=SKIP")
+                .unwrap()
+                .to_string(),
+            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-SKIP-DAYS-OFF=TRUE"
         );
     }
 
@@ -669,7 +695,7 @@ mod tests {
         );
         assert_eq!(
             days(
-                "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-BANK-HOLIDAYS=SKIP",
+                "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-SKIP-DAYS-OFF=TRUE",
                 "2026-12-01",
                 2
             ),
@@ -730,7 +756,7 @@ mod tests {
         );
         assert_eq!(
             said(
-                "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-BANK-HOLIDAYS=SKIP",
+                "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;X-SKIP-DAYS-OFF=TRUE",
                 "2026-10-30"
             ),
             "Every month on the last working day"

@@ -2,7 +2,9 @@
 //! be written: words from what the readers know, numbers of every size and
 //! what joins them, put together at random, thousands of times over.
 
-use say_when::{Calendar, Day, DayOff, EventContext, Locale, Options, Reader, Time, read_clock};
+use say_when::{
+    Calendar, Day, DayOff, EventContext, Locale, Mention, Options, Reader, Time, read_clock,
+};
 
 const WORDS: [&str; 64] = [
     "the",
@@ -148,11 +150,8 @@ fn nothing_typed_panics_or_leaves_the_calendar() {
             reading.next.iter().for_each(|day| within(*day));
         }
         let context = EventContext {
-            today,
-            fallback_day: today,
-            fallback_time: Time::MIDNIGHT,
-            mentions: &["Priya"],
-            only_title: false,
+            mentions: vec![Mention::new("#Priya", "Priya")],
+            ..EventContext::new(today, Time::MIDNIGHT)
         };
         let event = reader.event(&text, &context);
         assert!(event.start_day <= event.end_day, "{text:?}: {event:?}");

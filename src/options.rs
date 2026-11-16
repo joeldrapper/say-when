@@ -8,8 +8,8 @@ use crate::words::name_words;
 
 /// Where a reader reads.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct Options {
     /// Where English is being read and written: the order of a date in
     /// figures, the day a week starts on, how days are labelled, and the
@@ -28,8 +28,7 @@ impl Options {
 /// like someone's birthday, for phrases to say: "mum's birthday", "a week
 /// before Ann's birthday", "our anniversary next year".
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NamedDate {
     /// Each way of saying whose it is: "ann", "ann smith", "mum", "our". A
     /// name with anything but words in it, like a number, is never said.
@@ -78,16 +77,16 @@ impl From<&NamedDate> for Named {
 /// times are in. The reader knows no time zones itself: it's given the
 /// names, and gives back whatever each stands for.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct ZoneNames {
     /// Names read before the word "time", as in "9am New York time": each
     /// in lower case with single spaces, and the zone it names.
-    pub before_time: Vec<(String, String)>,
+    pub before_word_time: Vec<(String, String)>,
     /// Names read straight after a time, as in "10:00 PT" or "at 3pm
     /// Tokyo". Fewer than the others, since many cities are people's
     /// names too.
-    pub after_time: Vec<(String, String)>,
+    pub after_a_time: Vec<(String, String)>,
 }
 
 impl ZoneNames {

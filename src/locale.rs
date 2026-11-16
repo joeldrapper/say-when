@@ -6,11 +6,12 @@
 
 use crate::day::{Day, Weekday};
 
-/// Where English is being read and written.
+/// Where English is being read and written. The UK unless said.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum Locale {
     #[default]
     Uk,
@@ -121,8 +122,8 @@ impl Locale {
     }
 
     /// A day said in full, like "9 December", with its year when that
-    /// isn't the year it is today.
-    pub(crate) fn long(self, day: Day, today: Option<Day>) -> String {
+    /// isn't the year it is today, or always when there's no today.
+    pub fn long(self, day: Day, today: Option<Day>) -> String {
         let (year, month, date) = day.ymd();
         let said = self.day_of_month(month, date);
         if today.is_some_and(|today| today.year() == year) {
@@ -133,7 +134,7 @@ impl Locale {
 
     /// A day without its weekday, like "17 Nov", with its year when that
     /// isn't the year it is today.
-    pub(crate) fn short(self, day: Day, today: Day) -> String {
+    pub fn short(self, day: Day, today: Day) -> String {
         let label = self.label(day, today);
         label[if self.month_first() { 5 } else { 4 }..].to_string()
     }

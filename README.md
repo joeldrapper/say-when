@@ -25,7 +25,7 @@ let today = Day::new(2026, 10, 20).unwrap();
 
 let read = reader.days("the day before the last working day of november", today);
 assert_eq!(read[0].day.to_string(), "2026-11-29");
-assert_eq!(read[0].how, "the day before Mon 30 Nov, the last working day of November 2026");
+assert_eq!(read[0].how.as_deref(), Some("the day before Mon 30 Nov, the last working day of November 2026"));
 
 let repeats = reader.repeats("every other thursday until christmas", today, today);
 assert_eq!(repeats[0].repeat.rule.to_string(), "FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;UNTIL=20261225");
@@ -69,7 +69,7 @@ let today = Day::new(2026, 10, 20).unwrap();
 
 let read = reader.days("2 working days after 11/25", today);
 assert_eq!(read[0].day.to_string(), "2026-11-30");
-assert_eq!(read[0].how, "2 working days after Wed, Nov 25");
+assert_eq!(read[0].how.as_deref(), Some("2 working days after Wed, Nov 25"));
 ```
 
 ## What it does with what it can't read

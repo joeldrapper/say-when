@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Fixture {
     named: Vec<NamedDate>,
     zones: ZoneNames,
@@ -35,7 +34,7 @@ fn main() {
             days_off: fixture.calendars["england-and-wales"].clone(),
             ..Calendar::default()
         })
-        .with_named_dates(&fixture.named)
+        .with_named_dates(fixture.named.clone())
         .with_zones(fixture.zones);
     let cases = |name: &str| -> Vec<Value> {
         let text = std::fs::read_to_string(directory.join(format!("{name}.jsonl"))).unwrap();
@@ -94,13 +93,7 @@ fn main() {
     });
     time("events", "an event", &|case, said| {
         let today = day(case, "today");
-        let context = EventContext {
-            today,
-            fallback_day: today,
-            fallback_time: fixture.fallback_time,
-            mentions: &[],
-            only_title: false,
-        };
+        let context = EventContext::new(today, fixture.fallback_time);
         black_box(reader.event(said, &context));
     });
     time("clocks", "a time of day", &|_, said| {

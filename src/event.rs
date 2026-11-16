@@ -10,7 +10,7 @@
 //!   5pm", or over a span, like "this weekend" or "all of november".
 //! - how it repeats, as the repeat reader reads it: "every other friday".
 //! - where: what follows "at" that isn't a time.
-//! - who: the names the caller says are mentions, written with a "#".
+//! - who: the mentions the caller marks, however they're written.
 //! - the time zone its times are in, when one's named: "9am New York
 //!   time", "10:00 PT".
 //!
@@ -39,26 +39,67 @@ use crate::words::{Token, tokens_of};
 use crate::{DayReading, Reader, SpanKind};
 
 /// What an event's sentence is read with.
-#[derive(Clone, Debug)]
-pub struct EventContext<'a> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct EventContext {
     /// The day it is.
     pub today: Day,
     /// The day it's on if nothing says.
     pub fallback_day: Day,
     /// The time it's at if nothing says.
     pub fallback_time: Time,
-    /// The names mentioned, in the order they are in the sentence, each
-    /// as it's written there after its "#": "Priya", "Ann Smith".
-    pub mentions: &'a [&'a str],
-    /// Whether it's all the title, with nothing read from it but who's
-    /// mentioned.
-    pub only_title: bool,
+    /// How long it lasts, in minutes, when it's at a time and nothing
+    /// says for how long, or what it is doesn't. An hour unless said.
+    #[cfg_attr(feature = "serde", serde(default = "an_hour"))]
+    pub default_length: u32,
+    /// Who's mentioned, in the order they're in the sentence.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub mentions: Vec<Mention>,
+}
+
+#[cfg(feature = "serde")]
+fn an_hour() -> u32 {
+    60
+}
+
+impl EventContext {
+    /// For a day, with nothing said: an event on that day, at a time,
+    /// for an hour, mentioning no one.
+    pub fn new(today: Day, fallback_time: Time) -> EventContext {
+        EventContext {
+            today,
+            fallback_day: today,
+            fallback_time,
+            default_length: 60,
+            mentions: Vec::new(),
+        }
+    }
+}
+
+/// Someone or something mentioned in an event's sentence, as the caller
+/// marks them, however that is: `#Priya Raman` or `@Priya`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Mention {
+    /// As it's written in the sentence, like "#Priya Raman". Matched
+    /// whatever its case, and with "'s" after it or not.
+    pub written: String,
+    /// As the title says it, like "Priya Raman".
+    pub said: String,
+}
+
+impl Mention {
+    /// A mention written one way and said another.
+    pub fn new(written: impl Into<String>, said: impl Into<String>) -> Mention {
+        Mention { written: written.into(), said: said.into() }
+    }
 }
 
 /// What was read from what was typed, rather than taken as it is when
 /// nothing says.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct EventRead {
     /// Whether a day was said.
     pub day: bool,
@@ -67,12 +108,32 @@ pub struct EventRead {
     /// Whether how long it lasts was said.
     pub length: bool,
     /// The meal its time was taken from, if no time was given.
-    pub meal: Option<String>,
+    pub meal: Option<Meal>,
+}
+
+/// A meal, which says when something is and for how long when nothing
+/// else does: "Lunch with Priya" is at noon, for an hour.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+#[non_exhaustive]
+pub enum Meal {
+    /// At 8, for an hour.
+    Breakfast,
+    /// At 11, for an hour and a half.
+    Brunch,
+    /// At noon, for an hour: "lunch", "lunchtime".
+    Lunch,
+    /// At 6pm, for two hours.
+    Drinks,
+    /// At 7pm, for two hours: "dinner", "supper".
+    Dinner,
 }
 
 /// How an event repeats, and how that was read.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct EventRepeat {
     /// How it repeats, from the day the event starts.
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -83,16 +144,14 @@ pub struct EventRepeat {
 
 /// An event, as its sentence says it.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct EventReading {
     /// What it's called: what's left of the sentence.
     pub title: String,
     /// Which of the mentions given were found, by their place among them,
     /// in the order they're in.
     pub mentioned: Vec<usize>,
-    /// Whether it's over whole days.
-    pub all_day: bool,
     /// The day it starts.
     pub start_day: Day,
     /// The day it ends.
@@ -101,8 +160,8 @@ pub struct EventReading {
     pub start_time: Option<Time>,
     /// The time it ends, or `None` over whole days.
     pub end_time: Option<Time>,
-    /// Where it is.
-    pub location: String,
+    /// Where it is, if it's said.
+    pub location: Option<String>,
     /// How it repeats, if it does.
     pub repeat: Option<EventRepeat>,
     /// The time zone its times are in, when one's named.
@@ -112,6 +171,13 @@ pub struct EventReading {
     /// Other days what was typed might start on, like the end of the
     /// week's Sunday after its Friday.
     pub others: Vec<Day>,
+}
+
+impl EventReading {
+    /// Whether it's over whole days, with no times.
+    pub fn is_all_day(&self) -> bool {
+        self.start_time.is_none()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -205,17 +271,30 @@ fn joins(word: &str) -> bool {
     matches!(word, "to" | "-" | "–" | "—") || UNTIL.contains(&word)
 }
 
-/// Meals, at the time and for as long as they usually are.
-fn meal(word: &str) -> Option<(Time, i64)> {
-    let (hour, minutes) = match word {
-        "breakfast" => (8, 60),
-        "brunch" => (11, 90),
-        "lunch" | "lunchtime" => (12, 60),
-        "drinks" => (18, 120),
-        "dinner" | "supper" => (19, 120),
-        _ => return None,
-    };
-    Some((Time::new(hour, 0)?, minutes))
+impl Meal {
+    /// The meal a word names.
+    fn named(word: &str) -> Option<Meal> {
+        Some(match word {
+            "breakfast" => Meal::Breakfast,
+            "brunch" => Meal::Brunch,
+            "lunch" | "lunchtime" => Meal::Lunch,
+            "drinks" => Meal::Drinks,
+            "dinner" | "supper" => Meal::Dinner,
+            _ => return None,
+        })
+    }
+
+    /// When it usually is, and for how many minutes.
+    fn usual(self) -> (Time, i64) {
+        let (hour, minutes) = match self {
+            Meal::Breakfast => (8, 60),
+            Meal::Brunch => (11, 90),
+            Meal::Lunch => (12, 60),
+            Meal::Drinks => (18, 120),
+            Meal::Dinner => (19, 120),
+        };
+        (Time::new(hour, 0).expect("a time"), minutes)
+    }
 }
 
 /// What an event is, and the hours it's usually in, so a bare hour said
@@ -474,7 +553,7 @@ struct End {
 
 struct Sentence<'a> {
     reader: &'a Reader,
-    context: &'a EventContext<'a>,
+    context: &'a EventContext,
     words: Vec<Word>,
 }
 
@@ -510,22 +589,20 @@ impl Sentence<'_> {
         self.plains()[from..to].join(" ")
     }
 
-    /// What's left for the title, each mention by what it calls who it's of.
+    /// What's left for the title, each mention as the caller says it.
     fn title(&self) -> String {
         let words: Vec<&str> = self
             .words
             .iter()
             .filter(|word| matches!(word.role, Role::Title | Role::Mention))
-            .map(|word| match word.role {
-                Role::Mention => word.text.strip_prefix('#').unwrap_or(&word.text),
-                _ => word.text.as_str(),
-            })
+            .map(|word| word.text.as_str())
             .collect();
         words.join(" ").trim_end_matches([' ', ',', ';', ':', '–', '-']).to_string()
     }
 
     /// Each mention given, in the order they're in, as it's written, with
-    /// "'s" after it or not, as in "#Harry's".
+    /// "'s" after it or not, as in "#Harry's". Its words become one, said
+    /// as the caller says it, with whatever followed it.
     fn mentions(&mut self) -> Vec<usize> {
         let mut found = Vec::new();
         let labels: Vec<(usize, Vec<String>)> = self
@@ -533,8 +610,8 @@ impl Sentence<'_> {
             .mentions
             .iter()
             .enumerate()
-            .map(|(index, label)| {
-                (index, label.split_whitespace().map(plain_word).collect::<Vec<_>>())
+            .map(|(index, mention)| {
+                (index, mention.written.split_whitespace().map(plain_word).collect::<Vec<_>>())
             })
             .filter(|(_, parts)| !parts.is_empty())
             .collect();
@@ -544,19 +621,17 @@ impl Sentence<'_> {
             let (which, parts) = &labels[next];
             let said = parts.iter().enumerate().all(|(offset, part)| {
                 let Some(word) = self.plain(index + offset) else { return false };
-                let typed = if offset == 0 { format!("#{part}") } else { part.clone() };
                 let possessive = word.strip_suffix("'s").unwrap_or(word);
-                word == typed || (offset + 1 == parts.len() && possessive == typed)
+                word == part || (offset + 1 == parts.len() && possessive == part)
             });
             if said {
                 next += 1;
-                // Joined into one word, so the title keeps the name together.
                 let end = index + parts.len();
-                let text = self.words[index..end]
-                    .iter()
-                    .map(|word| word.text.as_str())
-                    .collect::<Vec<_>>();
-                self.words[index].text = text.join(" ");
+                // What followed its last word, like "'s" or a comma.
+                let last = &self.words[end - 1].text;
+                let after: String =
+                    last.chars().skip(parts[parts.len() - 1].chars().count()).collect();
+                self.words[index].text = format!("{}{after}", self.context.mentions[*which].said);
                 self.words[index].role = Role::Mention;
                 self.words.drain(index + 1..end);
                 found.push(*which);
@@ -605,7 +680,8 @@ impl Sentence<'_> {
                     if !free(self, from, index + 1) {
                         continue;
                     }
-                    if let Some(zone) = ZoneNames::find(&zones.before_time, &self.said(from, index))
+                    if let Some(zone) =
+                        ZoneNames::find(&zones.before_word_time, &self.said(from, index))
                     {
                         let zone = zone.to_string();
                         self.take(from, index + 1, Role::When);
@@ -621,7 +697,7 @@ impl Sentence<'_> {
                         continue;
                     }
                     if let Some(zone) =
-                        ZoneNames::find(&zones.after_time, &self.said(index, index + size))
+                        ZoneNames::find(&zones.after_a_time, &self.said(index, index + size))
                     {
                         let zone = zone.to_string();
                         let time = self.plain(index + size) == Some("time");
@@ -1025,8 +1101,7 @@ impl Sentence<'_> {
             .repeats(said, from, self.context.today)
             .into_iter()
             .find(|reading| {
-                reading.repeat.kind == RepeatKind::Schedule
-                    && !reading.repeat.rule.skips_bank_holidays
+                reading.repeat.kind == RepeatKind::Schedule && !reading.repeat.rule.skips_days_off
             })
             .map(|reading| (reading.repeat, reading.how))
     }
@@ -1080,7 +1155,7 @@ impl Sentence<'_> {
             .words
             .iter()
             .map(|word| {
-                !could_say_when(&word.plain) && !self.reader.zone_words.contains(&word.plain)
+                !could_say_when(&word.plain) && !self.reader.zones.words.contains(&word.plain)
             })
             .collect();
         for (start, ends) in ends.iter().enumerate() {
@@ -1181,7 +1256,7 @@ impl Sentence<'_> {
         }
         let day = readings[0].day;
         let whole = self.reader.span(&said, today).filter(|span| {
-            matches!(span.unit, SpanKind::Week | SpanKind::Weekend) && span.first == day
+            matches!(span.kind, SpanKind::Week | SpanKind::Weekend) && span.first == day
         });
         Some((
             day,
@@ -1457,7 +1532,7 @@ impl Sentence<'_> {
     /// been read, or "with", as in "at Dishoom with #Priya". It stops at
     /// "and" only before what's been read, since "and" is in names like
     /// "Smith and Wollensky".
-    fn place(&mut self) -> String {
+    fn place(&mut self) -> Option<String> {
         for index in 0..self.words.len() {
             if !self.free(index) || !matches!(self.plain(index), Some("at" | "@")) {
                 continue;
@@ -1477,9 +1552,9 @@ impl Sentence<'_> {
             let location = words.join(" ").trim_end_matches([',', ';', ':']).to_string();
             self.take(index, index + 1, Role::When);
             self.take(index + 1, end, Role::Place);
-            return location;
+            return Some(location);
         }
-        String::new()
+        None
     }
 }
 
@@ -1532,12 +1607,8 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         .collect();
     let mut sentence = Sentence { reader, context, words };
     let mentioned = sentence.mentions();
-    if context.only_title {
-        let untyped = read(reader, "", &EventContext { only_title: false, ..context.clone() });
-        return EventReading { title: sentence.title(), mentioned, ..untyped };
-    }
     // The zone first, so a city in it isn't where it is, or its title.
-    let time_zone = sentence.zone(&reader.zones);
+    let time_zone = sentence.zone(&reader.zones.names);
     let whole_day = sentence.all_day();
     let (part, tonight) = sentence.part_of_day();
     // What the event is, which says the hours a bare hour's in, unless the
@@ -1624,13 +1695,12 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         .filter(|last| *last >= start_day);
 
     // A meal in its title, when it's not said when it is, or how long.
-    let meal_word = sentence
+    let meal_named = sentence
         .words
         .iter()
         .filter(|word| word.role == Role::Title)
-        .find(|word| meal(&word.plain).is_some())
-        .map(|word| word.plain.clone());
-    let meal_usual = meal_word.as_deref().and_then(meal);
+        .find_map(|word| Meal::named(&word.plain));
+    let meal_usual = meal_named.map(Meal::usual);
     let days_long = match length {
         Some(Length::Days(days)) => Some(days),
         _ => None,
@@ -1649,15 +1719,14 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         day: given.is_some() || repeated.is_some(),
         time: time.is_some() || range_times.is_some(),
         length: length.is_some() || last_day.is_some(),
-        meal: meal_word.filter(|_| usual.is_some()),
+        meal: meal_named.filter(|_| usual.is_some()),
     };
     let repeat = repeated
         .clone()
         .map(|(repeat, how)| EventRepeat { repeat: Repeat { starts: start_day, ..repeat }, how });
-    let shared = |all_day, end_day, start_time, end_time| EventReading {
+    let shared = |end_day, start_time, end_time| EventReading {
         title: title.clone(),
         mentioned: mentioned.clone(),
-        all_day,
         start_day,
         end_day,
         start_time,
@@ -1678,15 +1747,16 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         let end = last_day
             .or_else(|| start_day.add_days(days_long.unwrap_or(1) - 1))
             .unwrap_or(start_day);
-        return shared(true, end, None, None);
+        return shared(end, None, None);
     }
 
     // From one day and time to another.
     if let (Some(range), Some((from, to))) = (ranged, range_times) {
-        return shared(false, range.end_day, Some(from), Some(to));
+        return shared(range.end_day, Some(from), Some(to));
     }
 
     let start_time = time.and_then(|(start, ..)| start).or(usual).unwrap_or(context.fallback_time);
+    let default_length = i64::from(context.default_length);
     let end = time.and_then(|(_, end, _)| end).map(|end| end.after(start_time));
     let meal_minutes = meal_usual.map(|(_, minutes)| minutes);
     // Over days, at the times said: "6-8 nov 9-5" is from 9 on the first
@@ -1694,9 +1764,9 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
     // after it as one would on its own: "mon-fri at 9" is from 9 on Monday
     // to 10 on Friday.
     if let Some(last_day) = last_day {
-        let length = minutes_long.or(meal_minutes).unwrap_or(60);
+        let length = minutes_long.or(meal_minutes).unwrap_or(default_length);
         let end = end.unwrap_or(Time::from_minutes(i64::from(start_time.minutes()) + length));
-        return shared(false, last_day, Some(start_time), Some(end));
+        return shared(last_day, Some(start_time), Some(end));
     }
     let minutes = match (days_long, minutes_long, end) {
         (Some(days), ..) => days * 24 * 60,
@@ -1705,9 +1775,9 @@ pub(crate) fn read(reader: &Reader, text: &str, context: &EventContext) -> Event
         (_, _, Some(end)) => {
             (i64::from(end.minutes()) - i64::from(start_time.minutes()) - 1).rem_euclid(24 * 60) + 1
         }
-        _ => meal_minutes.unwrap_or(60),
+        _ => meal_minutes.unwrap_or(default_length),
     };
     let ends = i64::from(start_time.minutes()) + minutes;
     let end_day = start_day.add_days(ends.div_euclid(24 * 60)).unwrap_or(start_day);
-    shared(false, end_day, Some(start_time), Some(Time::from_minutes(ends)))
+    shared(end_day, Some(start_time), Some(Time::from_minutes(ends)))
 }

@@ -893,16 +893,17 @@ impl Found {
 
 /// What kind of span one is.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum SpanKind {
     Week,
     Weekend,
     Month,
-    Year,
     /// A quarter of a year.
-    Other,
+    Quarter,
+    Year,
 }
 
 /// A span of days worked out: first to last, and what it's called.
@@ -1032,7 +1033,7 @@ impl Context<'_> {
                     first,
                     last,
                     name: format!("Q{} {at}", quarter + 1),
-                    kind: SpanKind::Other,
+                    kind: SpanKind::Quarter,
                 })
             }
             SpanExpr::Year(year) => year_span(*year),

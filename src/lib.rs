@@ -16,85 +16,97 @@ mod words;
 
 pub use calendar::{Calendar, DayOff};
 pub use clock::read_clock;
-pub use day::{Day, Time, Weekday, days_in_month, is_leap_year};
+pub use day::{Day, ParseError, Time, Weekday, days_in_month, is_leap_year};
 pub use days::SpanKind;
-pub use event::{EventContext, EventRead, EventReading, EventRepeat};
+pub use event::{EventContext, EventRead, EventReading, EventRepeat, Meal, Mention};
 pub use locale::Locale;
 pub use named::easter;
 pub use options::{NamedDate, Options, ZoneNames};
 pub use repeat::{Repeat, RepeatKind};
 pub use rule::{ByDay, Frequency, Rule};
-pub use words::name_words;
 
 use calendar::Working;
 use days::{Context, Parser};
 use options::Named;
+use std::sync::Arc;
 
 /// A day a phrase might mean.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DayReading {
     /// The day.
     pub day: Day,
     /// How it was read, like "the day before Thu 30 Nov 2028, the last
-    /// working day of November 2028", or nothing for a day on its own.
-    pub how: String,
+    /// working day of November 2028", or `None` for a day on its own.
+    pub how: Option<String>,
     /// Whose day it was read from, as it would be said, like "2 weeks
     /// before Eli Jones’s birthday", if it was read from a named date.
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub about: Option<String>,
 }
 
 /// A span of days a phrase names.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SpanReading {
     /// Its first day.
     pub first: Day,
     /// Its last day.
     pub last: Day,
     /// What kind of span it is.
-    pub unit: SpanKind,
+    pub kind: SpanKind,
 }
 
 /// A day what's typed in a date picker's search might mean.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DaySuggestion {
     /// The day.
     pub day: Day,
-    /// What to call it, like "Friday" or "In 3 days", or nothing when the
+    /// What to call it, like "Friday" or "In 3 days", or `None` when the
     /// day's own label says it best.
-    pub name: String,
+    pub name: Option<String>,
     /// Whose day it was worked out from, like "2 weeks before Eli Jones’s
     /// birthday".
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub about: Option<String>,
 }
 
 /// A way a phrase might say something repeats.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RepeatReading {
     /// How it repeats.
     pub repeat: Repeat,
     /// How it was read, like "Every 2 weeks on Tuesday".
     pub how: String,
-    /// The next few days it comes round on, or for one after it's done,
-    /// the day it would next if it were done today.
+    /// The next four days it comes round on ([`Reader::next_days`] gives
+    /// more), or for one after it's done, the day it would next if it
+    /// were done today.
     pub next: Vec<Day>,
 }
 
 /// Reads what's typed, for somewhere and someone: see [`Options`].
+///
+/// Making one works out what it's told once, so make one and keep it,
+/// rather than one a phrase. A clone shares what it was told.
 #[derive(Clone, Debug, Default)]
 pub struct Reader {
     options: Options,
-    calendar: Working,
+    calendar: Arc<Working>,
     named: Vec<Named>,
-    pub(crate) zones: ZoneNames,
+    zones: Arc<Zones>,
+}
+
+/// The names time zones go by, as a reader keeps them.
+#[derive(Debug, Default)]
+pub(crate) struct Zones {
+    pub(crate) names: ZoneNames,
     /// Every word of every zone's name, for telling a word that could be
     /// part of when something is from one that couldn't.
-    pub(crate) zone_words: std::collections::HashSet<String>,
+    pub(crate) words: std::collections::HashSet<String>,
 }
 
 impl Reader {
@@ -102,10 +114,9 @@ impl Reader {
     pub fn new(options: Options) -> Reader {
         Reader {
             options,
-            calendar: Working::weekdays(),
+            calendar: Arc::new(Working::weekdays()),
             named: Vec::new(),
-            zones: ZoneNames::default(),
-            zone_words: Default::default(),
+            zones: Arc::default(),
         }
     }
 
@@ -114,7 +125,7 @@ impl Reader {
     /// the week are worked. Without one, a working day is Monday to
     /// Friday.
     pub fn with_calendar(mut self, calendar: Calendar) -> Reader {
-        self.calendar = Working::from(calendar);
+        self.calendar = Arc::new(Working::from(calendar));
         self
     }
 
@@ -124,16 +135,16 @@ impl Reader {
     }
 
     /// With days that have names only the caller knows, like birthdays.
-    pub fn with_named_dates(mut self, dates: &[NamedDate]) -> Reader {
-        self.named = dates.iter().map(Named::from).collect();
+    pub fn with_named_dates(mut self, dates: impl IntoIterator<Item = NamedDate>) -> Reader {
+        self.named = dates.into_iter().map(|date| Named::from(&date)).collect();
         self
     }
 
     /// With the names time zones go by, for events to be set in.
     pub fn with_zones(mut self, zones: ZoneNames) -> Reader {
-        let names = zones.before_time.iter().chain(&zones.after_time);
-        self.zone_words = names.flat_map(|(name, _)| name.split(' ')).map(str::to_string).collect();
-        self.zones = zones;
+        let names = zones.before_word_time.iter().chain(&zones.after_a_time);
+        let words = names.flat_map(|(name, _)| name.split(' ')).map(str::to_string).collect();
+        self.zones = Arc::new(Zones { names: zones, words });
         self
     }
 
@@ -187,7 +198,8 @@ impl Reader {
             }
             let Some(found) = context.day(&expr) else { continue };
             if !readings.iter().any(|reading| reading.day == found.day) {
-                readings.push(DayReading { day: found.day, how: found.how, about: found.about });
+                let how = (!found.how.is_empty()).then_some(found.how);
+                readings.push(DayReading { day: found.day, how, about: found.about });
             }
         }
         readings
@@ -202,7 +214,7 @@ impl Reader {
         parser.span(0, true, 0).into_iter().filter(|(_, end)| *end == tokens.len()).find_map(
             |(expr, _)| {
                 let span = context.span(&expr)?;
-                Some(SpanReading { first: span.first, last: span.last, unit: span.kind })
+                Some(SpanReading { first: span.first, last: span.last, kind: span.kind })
             },
         )
     }
@@ -274,20 +286,11 @@ impl Reader {
         }
     }
 
-    /// The days a reading comes round on, as a line under how it was read:
-    /// "Tue 3 Nov, 17 Nov, 1 Dec", with the weekday only on the first when
-    /// they're all on the same one.
-    pub fn next_line(&self, reading: &RepeatReading, today: Day) -> String {
-        let style = self.options.locale;
-        let Some(first) = reading.next.first() else { return "No more days".to_string() };
-        if reading.repeat.kind == RepeatKind::After {
-            return format!("Next on {}, if it’s done today", style.short(*first, today));
-        }
-        let same = reading.next.iter().all(|day| day.weekday() == first.weekday());
-        let said = reading.next.iter().enumerate().map(|(index, day)| {
-            if same && index > 0 { style.short(*day, today) } else { style.label(*day, today) }
-        });
-        said.collect::<Vec<_>>().join(", ")
+    /// A time of day typed on its own, as [`read_clock`] reads it: "3pm",
+    /// "13:30", "half three", "noon". A bare hour is in the afternoon up
+    /// to 7, or the first after `after` when it's given.
+    pub fn time(&self, text: &str, after: Option<Time>) -> Option<Time> {
+        read_clock(text, after)
     }
 
     /// Reads an event typed out as a sentence, like "Lunch with Priya
@@ -319,7 +322,7 @@ impl Reader {
             if found.iter().any(|each| each.day == day) {
                 continue;
             }
-            let name = if day == today { "Today".to_string() } else { name.unwrap_or_default() };
+            let name = if day == today { Some("Today".to_string()) } else { name };
             found.push(DaySuggestion { day, name, about });
         }
         found

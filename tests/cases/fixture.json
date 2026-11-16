@@ -31,7 +31,7 @@
 		}
 	],
 	"zones": {
-		"beforeTime": [
+		"before_word_time": [
 			["pt", "America/Los_Angeles"],
 			["pst", "America/Los_Angeles"],
 			["et", "America/New_York"],
@@ -51,7 +51,7 @@
 			["regina", "America/Regina"],
 			["casey", "Antarctica/Casey"]
 		],
-		"afterTime": [
+		"after_a_time": [
 			["pt", "America/Los_Angeles"],
 			["pst", "America/Los_Angeles"],
 			["et", "America/New_York"],
@@ -70,7 +70,7 @@
 			["kolkata", "Asia/Kolkata"]
 		]
 	},
-	"fallbackTime": "14:00",
+	"fallback_time": "14:00",
 	"calendars": {
 		"england-and-wales": [
 			{ "day": "2015-01-01", "name": "New Year’s Day" },
