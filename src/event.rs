@@ -237,7 +237,11 @@ pub struct ReadWord {
 
 /// What a word was read as. A word that leads to what it's part of, like
 /// "on" in "on friday", "for" in "for 2 hours" or "at" before a place,
-/// is read as what it leads to.
+/// is read as what it leads to, and punctuation on its own after what
+/// was read, like "," in "tomorrow , 3pm", as what it follows.
+///
+/// With serde, each is its name in snake case, like `"day"` or
+/// `"time_zone"`, but a mention, which is `{"mention": 0}`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
@@ -1166,11 +1170,12 @@ impl Sentence<'_> {
                 }
                 for size in (index - start + 1..=end - start).rev() {
                     // Not one that ends on a word like "for" or "the",
-                    // which leads to something else, like how long each is.
+                    // which leads to something else, like how long each is,
+                    // or on punctuation.
                     let last = start + size - 1;
-                    let leads_on = self
-                        .plain(last)
-                        .is_some_and(|word| JOINERS.contains(&word) || FILLERS.contains(&word));
+                    let leads_on = self.plain(last).is_some_and(|word| {
+                        JOINERS.contains(&word) || FILLERS.contains(&word) || word.is_empty()
+                    });
                     if !self.free(last) || leads_on {
                         continue;
                     }
@@ -1523,7 +1528,19 @@ impl Sentence<'_> {
                     || side(to, true)
                     || (range.times.is_some() && side(from, false) && side(to, false))
             });
-            if times || side_time(&[word], true).is_some() {
+            // A bare number, when the range has times, unless it's the
+            // day of a month, as "6" is in "fri 6 nov 9 to 5".
+            let before = |back| at.checked_sub(back).and_then(|at| self.plain(at));
+            let dated = self.plain(at + 1).is_some_and(is_month)
+                || (before(1).is_some_and(is_month) && !before(2).is_some_and(is_date));
+            // And only before what ends a time, or another, or nothing, so
+            // not "3" in "in 3 weeks".
+            let next = self.plain(at + 1).filter(|_| at + 1 < to);
+            let ends = next.is_none_or(|next| {
+                joins(next) || matches!(next, "and" | "am" | "pm" | "o'clock" | "oclock")
+            });
+            let bare = range.times.is_some() && figures(word).is_some() && !dated && ends;
+            if times || bare || side_time(&[word], true).is_some() {
                 self.words[at].role = Role::Time;
             } else if matches!(word, "at" | "@")
                 && at + 1 < to
@@ -1531,6 +1548,15 @@ impl Sentence<'_> {
             {
                 self.words[at].role = Role::Time;
                 self.words[at + 1].role = Role::Time;
+            }
+        }
+        // What's between two times, as "to" in "9am to 5pm", is a time too.
+        for at in from + 1..to.saturating_sub(1) {
+            let between = self.role(at - 1) == Some(Role::Time)
+                && self.role(at + 1) == Some(Role::Time)
+                && (joins(&self.words[at].plain) || self.words[at].plain == "and");
+            if between {
+                self.words[at].role = Role::Time;
             }
         }
         Some(range)
@@ -1841,9 +1867,23 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
     for index in 0..sentence.words.len() {
         let joiner = sentence.free(index)
             && sentence.plain(index).is_some_and(|word| JOINERS.contains(&word));
-        let next = sentence.role(index + 1).filter(|role| role.is_when());
+        // Or the "at" a place starts with, as in "Dinner on at Dishoom".
+        let place = sentence.role(index + 1) == Some(Role::Place)
+            && matches!(sentence.plain(index + 1), Some("at" | "@"));
+        let next = sentence.role(index + 1).filter(|role| role.is_when() || place);
         if joiner && let Some(next) = next {
             sentence.words[index].role = next;
+        }
+    }
+    // Punctuation on its own, like "," or "!", after what was read, and
+    // before more of it or nothing, goes with it.
+    for index in 1..sentence.words.len() {
+        let after = sentence.role(index - 1).filter(|role| role.is_when());
+        let ends = sentence.role(index + 1).is_none_or(|role| role.is_when());
+        if sentence.free(index) && sentence.words[index].plain.is_empty() && ends {
+            if let Some(after) = after {
+                sentence.words[index].role = after;
+            }
         }
     }
     let mut title = sentence.title();
@@ -1929,8 +1969,8 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
         .iter()
         .map(|word| ReadWord { start: word.start, end: word.end, role: word.role })
         .collect();
-    let all_read = !sentence.words.is_empty()
-        && sentence.words.iter().all(|word| word.role != Role::Title || word.plain.is_empty());
+    let all_read =
+        !sentence.words.is_empty() && sentence.words.iter().all(|word| word.role != Role::Title);
     let shared = |end_day, start_time, end_time| Heard {
         title: title.clone(),
         mentioned: mentioned.clone(),

@@ -359,9 +359,12 @@ impl Reader {
     /// When something is, typed with nothing else, like "tomorrow 2-4pm",
     /// "fri 6pm to sun 5pm", "next week" or "3pm for an hour": the days and
     /// times an event's sentence would say, read the same way. Only what's
-    /// said: "at 3" is at 3, and not until any time. `None` when anything
-    /// typed isn't when, like "lunch tomorrow", or it says nothing of
-    /// when it starts, like "for 2 hours".
+    /// said: "at 3" is at 3, and not until any time. With no title to be
+    /// part of, a month on its own, like "may", is all of it, and so is a
+    /// quarter, a year or a named day that lasts, like "next month" or
+    /// "ramadan". `None` when anything typed isn't when, like "lunch
+    /// tomorrow", or it says nothing of when it starts, like "for 2
+    /// hours".
     pub fn when(&self, text: &str, today: Day) -> Option<WhenReading> {
         event::when(self, text, today)
     }

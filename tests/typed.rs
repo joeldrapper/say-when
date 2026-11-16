@@ -95,8 +95,23 @@ const NUMBERS: [&str; 16] = [
     "99999999",
     "999999999999999999999",
 ];
-const PIECES: [&str; 12] =
-    ["2027-02-29", "9/12", "31/2/99", "2-4pm", "13:60", "9.30", "1h30", "é", "🎂", "", "'s", "–"];
+const PIECES: [&str; 15] = [
+    "2027-02-29",
+    "9/12",
+    "31/2/99",
+    "2-4pm",
+    "13:60",
+    "9.30",
+    "1h30",
+    "é",
+    "🎂",
+    "",
+    "'s",
+    "–",
+    "!",
+    ",",
+    "...",
+];
 
 /// A number generator that's the same every run, so a failure can be run again.
 struct Random(u64);
