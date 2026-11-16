@@ -1,5 +1,5 @@
 {
-	"name": "say-when",
+	"name": "@milieu/say-when",
 	"version": "0.1.0",
 	"description": "Reads days, ranges of days, times and how things repeat, written in plain English",
 	"keywords": [
@@ -54,6 +54,9 @@
 		"oxfmt": "^0.78.0",
 		"oxlint": "^1.93.0",
 		"typescript": "^7.0.2"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"engines": {
 		"node": ">=20.16"

@@ -174,12 +174,12 @@ and no others, and so many working days on is a working day so many away.
 
 ## From JavaScript and TypeScript
 
-The npm package [`say-when`](https://www.npmjs.com/package/say-when) ([source](https://github.com/joeldrapper/say-when/tree/main/js)) is this library compiled to
+The npm package [`@milieu/say-when`](https://www.npmjs.com/package/@milieu/say-when) ([source](https://github.com/joeldrapper/say-when/tree/main/js)) is this library compiled to
 WebAssembly, with a typed API in TypeScript, and it reads the same: the
 cases are run through it too.
 
 ```ts
-import { Reader } from 'say-when';
+import { Reader } from '@milieu/say-when';
 
 new Reader({ locale: 'uk' }).days('next friday', '2026-11-16')[0].day; // '2026-11-27'
 ```

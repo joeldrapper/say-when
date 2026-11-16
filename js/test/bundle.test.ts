@@ -1,5 +1,5 @@
 // The package as a bundler sees it, from dist: what's imported from
-// say-when has its module with it, however much is shaken out.
+// @milieu/say-when has its module with it, however much is shaken out.
 
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -14,11 +14,11 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 test('a bundle of say-when reads, with nothing set up', async () => {
 	const app = mkdtempSync(join(tmpdir(), 'say-when-'));
 	try {
-		mkdirSync(join(app, 'node_modules'));
-		symlinkSync(root, join(app, 'node_modules', 'say-when'));
+		mkdirSync(join(app, 'node_modules', '@milieu'), { recursive: true });
+		symlinkSync(root, join(app, 'node_modules', '@milieu', 'say-when'));
 		writeFileSync(
 			join(app, 'app.js'),
-			"import { Reader } from 'say-when';\nexport const day = new Reader().days('tomorrow', '2026-11-16')[0].day;\n"
+			"import { Reader } from '@milieu/say-when';\nexport const day = new Reader().days('tomorrow', '2026-11-16')[0].day;\n"
 		);
 		const { outputFiles } = await build({
 			entryPoints: [join(app, 'app.js')],
