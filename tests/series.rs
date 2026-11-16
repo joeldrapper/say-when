@@ -1,6 +1,6 @@
 //! A series' days, as a calendar asks for them.
 
-use say_when::{Day, Options, Reader, Repeat, Rule};
+use say_when::{Day, Offset, OffsetUnit, Options, Reader, Repeat, Rule, Time};
 
 fn day(text: &str) -> Day {
     Day::parse(text).unwrap()
@@ -58,4 +58,48 @@ fn leaves_out_the_days_it_skips() {
     assert!(!reader.repeats_on(&ten, day("2026-11-10")));
     assert_eq!(reader.next_days(&ten, day("2026-11-04"), 5), [day("2026-11-17")]);
     assert_eq!(reader.last_repeat_day(&ten), Some(day("2026-11-17")));
+}
+
+#[test]
+fn finds_a_day_however_far_off() {
+    let reader = Reader::new(Options::default());
+    let rule = Rule::parse("FREQ=YEARLY;INTERVAL=100").unwrap();
+    let repeat = Repeat::schedule(rule, Day::new(2000, 1, 1).unwrap());
+    let next = reader.next_days(&repeat, Day::new(2001, 1, 1).unwrap(), 2);
+    assert_eq!(next, [Day::new(2100, 1, 1).unwrap(), Day::new(2200, 1, 1).unwrap()]);
+}
+
+#[test]
+fn takes_no_interval_as_one() {
+    let reader = Reader::new(Options::default());
+    let mut rule = Rule::parse("FREQ=DAILY").unwrap();
+    rule.interval = 0;
+    assert_eq!(rule.to_string(), "FREQ=DAILY");
+    let start = Day::new(2026, 11, 16).unwrap();
+    let repeat = Repeat::schedule(rule, start);
+    assert!(reader.repeats_on(&repeat, start.add_days(3).unwrap()));
+    assert_eq!(reader.next_days(&repeat, start, 2), [start, start.add_days(1).unwrap()]);
+}
+
+#[test]
+fn moves_no_further_than_can_be_said() {
+    let reader = Reader::new(Options::default());
+    let day = Day::new(2026, 11, 16).unwrap();
+    let units = [
+        OffsetUnit::Minute,
+        OffsetUnit::Hour,
+        OffsetUnit::Day,
+        OffsetUnit::Week,
+        OffsetUnit::Month,
+        OffsetUnit::Year,
+        OffsetUnit::WorkingDay,
+        OffsetUnit::Weekday,
+    ];
+    for unit in units {
+        for count in [i64::MIN, i64::MAX] {
+            for time in [None, Time::new(9, 0)] {
+                assert_eq!(reader.offset_from(&Offset::by(count, unit), day, time), None);
+            }
+        }
+    }
 }

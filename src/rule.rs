@@ -159,7 +159,8 @@ impl ByDay {
 pub struct Rule {
     /// How often.
     pub frequency: Frequency,
-    /// Every how many: 2 for every other.
+    /// Every how many: 2 for every other. 0 is taken as 1, as an RRULE
+    /// with no INTERVAL is.
     pub interval: u32,
     /// How many times it comes round, if it stops after so many.
     pub count: Option<u32>,
@@ -189,6 +190,11 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Every how many, never 0.
+    fn interval_or_one(&self) -> u32 {
+        self.interval.max(1)
+    }
+
     /// A rule that comes round every one of a unit, with nothing else said.
     pub fn every(frequency: Frequency) -> Rule {
         Rule {
@@ -398,7 +404,7 @@ impl Rule {
             (Some(named), true, Frequency::Yearly) => {
                 let year = i32::try_from(
                     i64::from(start.year())
-                        .checked_add(period.checked_mul(i64::from(self.interval))?)?,
+                        .checked_add(period.checked_mul(i64::from(self.interval_or_one()))?)?,
                 )
                 .ok()?;
                 // None after the last year the calendar has it in.
@@ -429,7 +435,7 @@ impl Rule {
         calendar: &Working,
         named: Option<&Called>,
     ) -> Option<Vec<Day>> {
-        let step = period.checked_mul(i64::from(self.interval))?;
+        let step = period.checked_mul(i64::from(self.interval_or_one()))?;
         Some(match self.frequency {
             Frequency::Daily => {
                 let day = start.add_days(step)?;
@@ -495,7 +501,7 @@ impl Rule {
             }
             Frequency::Yearly => i64::from(to.year() - start.year()),
         };
-        periods.div_euclid(i64::from(self.interval))
+        periods.div_euclid(i64::from(self.interval_or_one()))
     }
 
     /// The days a schedule comes round on from its first, `start`, up to
@@ -527,7 +533,7 @@ impl Rule {
         // An offset can move a day out of its period, into another as far
         // off as it goes.
         let back = self.offset.map_or(1, |offset| {
-            let period = i64::from(self.interval).saturating_mul(match self.frequency {
+            let period = i64::from(self.interval_or_one()).saturating_mul(match self.frequency {
                 Frequency::Daily => 1,
                 Frequency::Weekly => 7,
                 Frequency::Monthly => 28,
@@ -626,7 +632,7 @@ impl Rule {
     /// The day something that repeats so long after it's done comes round
     /// next, done on a day.
     pub fn after_done(&self, done: Day) -> Option<Day> {
-        let n = i64::from(self.interval);
+        let n = i64::from(self.interval_or_one());
         match self.frequency {
             Frequency::Daily => done.add_days(n),
             Frequency::Weekly => done.add_days(7 * n),
@@ -675,12 +681,12 @@ impl Rule {
     /// rule leaves out, and the year of `today` is left off days in it.
     pub fn describe(&self, starts: Day, today: Option<Day>, locale: Locale) -> String {
         let unit = self.frequency.unit();
-        let every = if self.interval == 1 {
+        let every = if self.interval_or_one() == 1 {
             "Every".to_string()
         } else {
-            format!("Every {}", self.interval)
+            format!("Every {}", self.interval_or_one())
         };
-        let units = if self.interval == 1 { unit.to_string() } else { format!("{unit}s") };
+        let units = if self.interval_or_one() == 1 { unit.to_string() } else { format!("{unit}s") };
         let said = match self.frequency {
             Frequency::Yearly if self.on.is_some() => {
                 let on = self.on.as_deref().unwrap_or_default();
@@ -689,7 +695,7 @@ impl Rule {
                     None => format!("{every} {units} on {on}"),
                 }
             }
-            Frequency::Daily if self.interval == 1 && self.skips_days_off => {
+            Frequency::Daily if self.interval_or_one() == 1 && self.skips_days_off => {
                 "Every day but bank holidays".to_string()
             }
             Frequency::Daily => format!("{every} {units}"),
@@ -705,7 +711,7 @@ impl Rule {
                 };
                 let names =
                     list(weekdays.iter().map(|each| each.weekday.name().to_string()).collect());
-                match (self.interval, kind) {
+                match (self.interval_or_one(), kind) {
                     (1, Some(kind)) => format!("Every {kind}"),
                     (1, None) => format!("Every {names}"),
                     (interval, Some(kind)) => format!("Every {interval} weeks, on {kind}s"),
@@ -749,7 +755,7 @@ impl Rule {
     /// after it’s done".
     pub fn describe_after(&self) -> String {
         let unit = self.frequency.unit();
-        match self.interval {
+        match self.interval_or_one() {
             1 => format!("A {unit} after it’s done"),
             interval => format!("{interval} {unit}s after it’s done"),
         }
@@ -825,8 +831,8 @@ impl std::str::FromStr for Rule {
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FREQ={}", self.frequency.code())?;
-        if self.interval != 1 {
-            write!(f, ";INTERVAL={}", self.interval)?;
+        if self.interval_or_one() != 1 {
+            write!(f, ";INTERVAL={}", self.interval_or_one())?;
         }
         if let Some(month) = self.by_month {
             write!(f, ";BYMONTH={month}")?;

@@ -282,10 +282,20 @@ impl Reader {
     pub fn next_days(&self, repeat: &Repeat, from: Day, many: usize) -> Vec<Day> {
         match repeat.kind {
             RepeatKind::After => repeat.rule.after_done(from).into_iter().collect(),
-            // Far enough for any rule to have come round that many times,
-            // short of one every few years.
+            // Far enough for any rule to have come round that many times:
+            // thirty years, or at least as long as that many of its
+            // periods take.
             RepeatKind::Schedule => {
-                let to = from.add_months(12 * 30).unwrap_or(Day::MAX);
+                let rule = &repeat.rule;
+                let months = match rule.frequency {
+                    Frequency::Daily => 1,
+                    Frequency::Weekly => 2,
+                    Frequency::Monthly => 1,
+                    Frequency::Yearly => 12,
+                };
+                let periods = i64::from(rule.interval.max(1)).saturating_mul(many as i64 + 1);
+                let months = periods.saturating_mul(months).max(12 * 30);
+                let to = from.add_months(months).unwrap_or(Day::MAX);
                 self.repeat_days(repeat, from, to).take(many).collect()
             }
         }

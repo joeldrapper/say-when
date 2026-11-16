@@ -272,11 +272,12 @@ impl Working {
             return None;
         }
         let way = by.signum();
-        let (mut day, mut left) = (from, by.abs());
+        // Not so many there's no saying how many, as `i64::MIN` is.
+        let (mut day, mut left) = (from, i64::try_from(by.unsigned_abs()).ok()?);
         // So many weeks have fewer worked days than are left, so the last
         // of them is always come to a day at a time, and is a worked day.
         while left > each_week {
-            let to = day.add_days(way * 7 * ((left - 1) / each_week))?;
+            let to = day.add_days((7 * way).checked_mul((left - 1) / each_week)?)?;
             let (first, last) =
                 if way > 0 { (day.add_days(1)?, to) } else { (to, day.add_days(-1)?) };
             left -= self.worked(first, last, days_off);
