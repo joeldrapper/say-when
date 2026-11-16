@@ -332,10 +332,9 @@ const DAY_WORDS: [&str; 26] = [
 /// Words that are part of a day, but say nothing on their own.
 const FILLERS: [&str; 5] = ["on", "the", "this", "next", "by"];
 /// Words that start saying how it repeats.
-const REPEATS: [&str; 33] = [
+const REPEATS: [&str; 32] = [
     "every",
     "each",
-    "alternate",
     "daily",
     "nightly",
     "weekly",
@@ -368,14 +367,21 @@ const REPEATS: [&str; 33] = [
     "sundays",
 ];
 /// Whether the words from a place start to say how something repeats: one
-/// of the words that always do, or "once" or "half" with the word that
-/// makes them, as in "once a week" and "half yearly", since "once" and
-/// "half" are said for much else, as in "half three".
+/// of the words that always do, or "once", "half" or "alternate" with the
+/// word that makes them, as in "once a week", "half yearly" and "alternate
+/// days", since they're said for much else, as in "half three" and
+/// "alternate route".
 fn says_repeat(words: &[&str]) -> bool {
     match words {
         [word, ..] if REPEATS.contains(word) => true,
         ["once", next, ..] => matches!(*next, "a" | "an" | "per" | "every" | "each"),
         ["half", "yearly", ..] => true,
+        // "alternate days", "alternate tuesdays", but not "alternate route".
+        ["alternate", next, ..] => {
+            let one = next.strip_suffix('s').unwrap_or(next);
+            matches!(one, "day" | "week" | "weekend" | "weekday" | "month" | "year" | "fortnight")
+                || WEEKDAY_WORDS.iter().any(|(name, _)| *name == one)
+        }
         _ => false,
     }
 }

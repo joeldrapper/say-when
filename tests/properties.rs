@@ -163,9 +163,19 @@ proptest! {
         if let Some(when) = reader.when(&text, today) {
             prop_assert!(when.words.iter().all(|word| word.role != WordRole::Title));
             // With no title to be part of, a word that only might be a day,
-            // like "ha" half typed for Halloween, is one, as an event's
-            // title it's left: they read alike when the event has none.
-            if event.words.iter().all(|word| word.role != WordRole::Title) {
+            // like "ha" half typed for Halloween, is one, where an event
+            // leaves it in its title. That's the only way they differ.
+            let titled: Vec<_> =
+                event.words.iter().filter(|word| word.role == WordRole::Title).collect();
+            for word in &titled {
+                let read = when.words.iter().find(|read| read.start == word.start);
+                prop_assert!(
+                    read.is_some_and(|read| read.end == word.end && read.role == WordRole::Day),
+                    "{:?} is in the event's title but not a day of its own when",
+                    &text[word.start..word.end]
+                );
+            }
+            if titled.is_empty() {
                 prop_assert_eq!(&when.words, &event.words);
                 prop_assert_eq!(
                     (when.start_day, when.start_time),
