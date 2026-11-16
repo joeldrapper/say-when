@@ -715,6 +715,72 @@ impl Sentence<'_> {
         }
     }
 
+    /// Holds back the words of a weekend picked out of a month, as in "the
+    /// 2nd weekend in may every year", which no rule says, so no shorter
+    /// run of them is read instead: "every year" as the repeat and "2nd" as
+    /// 2 November. They're kept from what's read while it's held, and are
+    /// the title's after. Gives back which words were held.
+    fn hold_nth_weekends(&mut self) -> Vec<usize> {
+        const ORDINALS: [&str; 13] = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "last",
+            "final",
+            "penultimate",
+            "1st",
+            "2nd",
+            "3rd",
+            "4th",
+            "5th",
+        ];
+        let mut held = Vec::new();
+        for index in 0..self.words.len() {
+            let weekend = matches!(self.plain(index + 1), Some("weekend" | "weekends"));
+            if !self.free(index)
+                || !self.plain(index).is_some_and(|word| ORDINALS.contains(&word))
+                || !weekend
+            {
+                continue;
+            }
+            // "every third weekend" is every three weeks, which reads.
+            let counted = !matches!(
+                self.plain(index),
+                Some("first" | "1st" | "last" | "final" | "penultimate")
+            );
+            if counted && index > 0 && matches!(self.plain(index - 1), Some("every" | "each")) {
+                continue;
+            }
+            let mut from = index;
+            if from > 0 && self.plain(from - 1) == Some("the") && self.free(from - 1) {
+                from -= 1;
+            }
+            // Which month, and how often: "in may", "of the month", "of every
+            // month", "each year", "monthly".
+            const AFTER: [&str; 14] = [
+                "in", "of", "the", "every", "each", "month", "months", "year", "monthly", "yearly",
+                "annually", "a", "per", "in",
+            ];
+            let mut to = index + 2;
+            while to < self.words.len()
+                && self.free(to)
+                && self.plain(to).is_some_and(|word| {
+                    AFTER.contains(&word)
+                        || MONTH_WORDS
+                            .iter()
+                            .any(|month| word.len() >= 3 && month.starts_with(word))
+                })
+            {
+                to += 1;
+            }
+            held.extend(from..to);
+            self.take(from, to, Role::Repeat);
+        }
+        held
+    }
+
     fn plains(&self) -> Vec<&str> {
         self.words.iter().map(|word| word.plain.as_str()).collect()
     }
@@ -1889,10 +1955,14 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
     // for 6 weeks" is how long it goes on repeating, but after how long
     // each is in hours or minutes, as "every day for 2 hours" isn't.
     let hours = sentence.lasts(false);
+    let held = if event { sentence.hold_nth_weekends() } else { Vec::new() };
     let repeat_said = if event { sentence.repeats() } else { None };
     let length = hours.or_else(|| sentence.lasts(true));
     let span = if ranged.is_some() { None } else { sentence.spans() };
     let day = if ranged.is_some() || span.is_some() { None } else { sentence.days() };
+    for index in held {
+        sentence.take(index, index + 1, Role::Title);
+    }
     let location = if event { sentence.place() } else { None };
 
     // What joined the title to what was read, like "on" in "on friday",
