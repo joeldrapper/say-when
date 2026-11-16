@@ -245,14 +245,14 @@ pub(crate) fn shift_of(said: &[Token], timed: bool, like: &Parser) -> Option<Off
     }
     // "an hour before", "30 minutes after", "half an hour before", "2 hrs
     // earlier".
-    let (count, rest) = match &said[..] {
+    let (count, rest) = match said {
         [Token::Word(half), Token::Number(1, a), rest @ ..]
             if half == "half" && (a == "a" || a == "an") =>
         {
             (None, rest)
         }
         [Token::Number(n, _), rest @ ..] => (Some(i64::try_from(*n).ok()?), rest),
-        _ => (Some(0), &said[..]),
+        _ => (Some(0), said),
     };
     if let [Token::Word(unit), Token::Word(way)] = rest {
         let minutes = match unit.as_str() {

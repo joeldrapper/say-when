@@ -487,8 +487,9 @@ impl RepeatParser<'_> {
         // christmas", "2 days before the last working day of every month":
         // each day it comes round, moved.
         if at == 0 {
-            let most = self.parser.tokens.len().min(6);
-            for split in 1..most {
+            let most = self.parser.tokens.len().saturating_sub(1).min(5);
+            // An offset ends with which way it goes.
+            for split in (2..=most).filter(|split| self.is(split - 1, &["before", "after"])) {
                 let said = &self.parser.tokens[..split];
                 let Some(offset) = crate::offset::shift_of(said, false, &self.parser) else {
                     continue;

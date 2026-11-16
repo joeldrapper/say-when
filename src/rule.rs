@@ -26,6 +26,7 @@ use crate::calendar::Working;
 use crate::day::{Day, Weekday};
 use crate::days::ordinal_name;
 use crate::locale::{Locale, month_name};
+use crate::named::Called;
 use crate::offset::{Offset, Shift};
 use core::fmt;
 
@@ -297,28 +298,36 @@ impl Rule {
 
     /// The days in one period of the rule, in order, counting periods from
     /// the one it starts in, or `None` past the last day there is.
-    fn period_days(&self, start: Day, period: i64, calendar: &Working) -> Option<Vec<Day>> {
-        let Some(offset) = self.offset else { return self.unmoved_days(start, period, calendar) };
+    fn period_days(
+        &self,
+        start: Day,
+        period: i64,
+        calendar: &Working,
+        named: Option<&Called>,
+    ) -> Option<Vec<Day>> {
+        let Some(offset) = self.offset else {
+            return self.unmoved_days(start, period, calendar, named);
+        };
         // After a named day that lasts more than one, like Ramadan, is after
         // its last.
         let after = match offset.shift {
             Shift::By { count, .. } => count > 0,
             Shift::Weekday { before, .. } | Shift::Weekend { before } => !before,
         };
-        let ends = match (&self.on, after, self.frequency) {
-            (Some(name), true, Frequency::Yearly) => {
+        let ends = match (named, after, self.frequency) {
+            (Some(named), true, Frequency::Yearly) => {
                 let year = i32::try_from(
                     i64::from(start.year())
                         .checked_add(period.checked_mul(i64::from(self.interval))?)?,
                 )
                 .ok()?;
-                Some(calendar.named_span(name, year).map(|(_, last)| last))
+                Some(named.span(year).map(|(_, last)| last))
             }
             _ => None,
         };
         let days = match ends {
             Some(last) => last.into_iter().collect(),
-            None => self.unmoved_days(start, period, calendar)?,
+            None => self.unmoved_days(start, period, calendar, named)?,
         };
         let mut days: Vec<Day> =
             days.into_iter().filter_map(|day| Some(offset.from(day, None, calendar)?.0)).collect();
@@ -328,7 +337,13 @@ impl Rule {
     }
 
     /// The days in one period before an offset moves them.
-    fn unmoved_days(&self, start: Day, period: i64, calendar: &Working) -> Option<Vec<Day>> {
+    fn unmoved_days(
+        &self,
+        start: Day,
+        period: i64,
+        calendar: &Working,
+        named: Option<&Called>,
+    ) -> Option<Vec<Day>> {
         let step = period.checked_mul(i64::from(self.interval))?;
         Some(match self.frequency {
             Frequency::Daily => {
@@ -360,9 +375,13 @@ impl Rule {
             Frequency::Yearly => {
                 let year = i32::try_from(i64::from(start.year()).checked_add(step)?).ok()?;
                 Day::new(year, 1, 1)?;
-                match &self.on {
-                    Some(name) => calendar
-                        .named_day(name, year)
+                match named {
+                    // None after the last year the calendar has it in.
+                    Some(named) if named.last_year().is_some_and(|last| year > last) => {
+                        return None;
+                    }
+                    Some(named) => named
+                        .day(year)
                         .filter(|day| self.counts(*day, calendar))
                         .into_iter()
                         .collect(),
@@ -414,8 +433,17 @@ impl Rule {
         let back = if self.offset.is_some() { 2 } else { 1 };
         let before = if from > start { (self.periods_to(start, from) - back).max(0) } else { 0 };
         let skip = if self.count.is_none() { before } else { 0 };
+        // The named day it's on, if it's on one, which isn't on any day if
+        // the calendar hasn't got it.
+        let named = match &self.on {
+            Some(name) => match crate::named::find(&calendar.named, name) {
+                Some(named) => Some(named),
+                None => return days,
+            },
+            None => None,
+        };
         for period in skip..before + MOST_PERIODS {
-            let Some(found) = self.period_days(start, period, calendar) else { break };
+            let Some(found) = self.period_days(start, period, calendar, named) else { break };
             for day in found {
                 if day < start {
                     continue;

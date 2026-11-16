@@ -89,6 +89,14 @@ impl Called {
         }
     }
 
+    /// The last year it starts in, if it's not on the same day every year.
+    pub fn last_year(&self) -> Option<i32> {
+        match &self.falls {
+            Falls::On(..) => None,
+            Falls::Listed(times) => times.last().map(|(first, _)| first.year()),
+        }
+    }
+
     /// Whether it lasts more than a day, any of the times it's on.
     pub fn lasts(&self) -> bool {
         matches!(&self.falls, Falls::Listed(times) if times.iter().any(|(first, last)| first != last))
