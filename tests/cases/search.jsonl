@@ -1933,3 +1933,5 @@
 {"locale":"canada","out":{"corrected":null,"days":[{"about":null,"day":"2027-04-13","name":null}]},"text":"13/4","today":"2026-10-20"}
 {"locale":"canada","out":{"corrected":null,"days":[{"about":null,"day":"2026-10-25","name":"Next week"},{"about":null,"day":"2026-10-27","name":"In a week"}]},"text":"next week","today":"2026-10-20"}
 {"locale":"canada","out":{"corrected":null,"days":[{"about":null,"day":"2027-10-11","name":null}]},"text":"thanksgiving","today":"2026-10-20"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-24","name":null}]},"text":"the last working day before chr","today":"2026-11-16"}
+{"out":{"corrected":null,"days":[{"about":null,"day":"2026-12-18","name":null}]},"text":"last fri before christmas","today":"2026-11-16"}
