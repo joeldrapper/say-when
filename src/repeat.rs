@@ -18,6 +18,7 @@
 //! is kept, so "every other tue" is both this week's Tuesday on and next
 //! week's.
 
+use crate::calendar::Working;
 use crate::day::{Day, Weekday};
 use crate::days::{Context, DayExpr, Parser, Unit};
 use crate::offset::Shift;
@@ -182,11 +183,13 @@ impl RepeatParser<'_> {
         if self.is(at, &["weekend", "weekends"]) && text != "week" {
             add(&[Weekday::Saturday, Weekday::Sunday], false, at + 1);
         }
+        // The days the calendar works, which needn't be Monday to Friday.
+        let working = self.context.calendar.working_week();
         if self.is(at, &["working", "work", "business"]) && self.is(at + 1, &["day", "days"]) {
-            add(&WORKING, true, at + 2);
+            add(&working, true, at + 2);
         }
         if self.is(at, &["workday", "workdays"]) {
-            add(&WORKING, true, at + 1);
+            add(&working, true, at + 1);
         }
         // "tue", "tues", "tuesday", "tuesdays", or half typed, "tu".
         let one = if text.len() > 3 { text.strip_suffix('s').unwrap_or(text) } else { text };
@@ -651,7 +654,8 @@ impl RepeatParser<'_> {
                     rule.count = Some(count);
                 }
                 let Some(starts) = rule.first_day(base, calendar) else { continue };
-                rule.until = tail.until.or(tail.lasts.and_then(|lasts| end(starts, lasts)));
+                rule.until =
+                    tail.until.or(tail.lasts.and_then(|lasts| end(starts, lasts, calendar)));
                 if tail.lasts.is_some() && rule.until.is_none() {
                     continue;
                 }
@@ -680,8 +684,8 @@ impl RepeatParser<'_> {
 }
 
 /// The last day of something that goes on for so long from a day.
-fn end(starts: Day, (n, unit): (i64, Unit)) -> Option<Day> {
-    crate::days::moved(starts, n, unit, &crate::calendar::Working::weekdays())?.add_days(-1)
+fn end(starts: Day, (n, unit): (i64, Unit), calendar: &Working) -> Option<Day> {
+    crate::days::moved(starts, n, unit, calendar)?.add_days(-1)
 }
 
 /// What's typed, as the grammar reads it: without "repeat" or "repeats" at

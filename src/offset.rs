@@ -128,20 +128,28 @@ impl Offset {
         }
     }
 
-    /// The most days it can move a day, either way.
-    pub(crate) fn most_days(&self) -> i64 {
+    /// The most days it can move a day, either way, with a calendar's
+    /// working week and days off.
+    pub(crate) fn most_days(&self, calendar: &Working) -> i64 {
         match self.shift {
             Shift::By { count, unit } => {
-                count.unsigned_abs().min(i64::MAX as u64 / 400) as i64
-                    * match unit {
-                        OffsetUnit::Minute | OffsetUnit::Hour => 0,
-                        OffsetUnit::Day => 1,
-                        OffsetUnit::Week => 7,
-                        OffsetUnit::Month => 31,
-                        OffsetUnit::Year => 366,
-                        // However many days off there are.
-                        OffsetUnit::WorkingDay | OffsetUnit::Weekday => 3,
+                let count = count.unsigned_abs().min(i64::MAX as u64 / 400) as i64;
+                match unit {
+                    OffsetUnit::Minute | OffsetUnit::Hour => 0,
+                    OffsetUnit::Day => count,
+                    OffsetUnit::Week => count * 7,
+                    OffsetUnit::Month => count * 31,
+                    OffsetUnit::Year => count * 366,
+                    // Each of five a week is at most three days on, from a
+                    // Friday to a Monday.
+                    OffsetUnit::Weekday => count * 3,
+                    // As many weeks as it takes to work that many days and
+                    // every day off there is, and one more.
+                    OffsetUnit::WorkingDay => {
+                        let each_week = calendar.working_week().len().max(1) as i64;
+                        (count + calendar.days_off_count()) / each_week * 7 + 14
                     }
+                }
             }
             Shift::Weekday { .. } | Shift::Weekend { .. } => 14,
         }

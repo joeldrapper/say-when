@@ -1957,6 +1957,15 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
         meal_usual.map(|(time, _)| time).or(part.and_then(|part| part.time))
     };
     let range_times = ranged.and_then(|range| range.times);
+    // Only when, it has to say when it starts, by a day or a time, and not
+    // only how long, like "for 2 days".
+    let starts_said = given.is_some()
+        || time.is_some_and(|(start, ..)| start.is_some())
+        || range_times.is_some()
+        || usual.is_some();
+    if !event && !starts_said {
+        return None;
+    }
     let read = EventRead {
         day: given.is_some() || repeated.is_some(),
         time: time.is_some() || range_times.is_some(),

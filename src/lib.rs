@@ -273,7 +273,12 @@ impl Reader {
     pub fn describe_repeat(&self, repeat: &Repeat, today: Option<Day>) -> String {
         match repeat.kind {
             RepeatKind::After => repeat.rule.describe_after(),
-            RepeatKind::Schedule => repeat.rule.describe(repeat.starts, today, self.options.locale),
+            RepeatKind::Schedule => repeat.rule.describe_in(
+                repeat.starts,
+                today,
+                self.options.locale,
+                &self.calendar.working_week(),
+            ),
         }
     }
 

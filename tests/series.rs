@@ -103,3 +103,60 @@ fn moves_no_further_than_can_be_said() {
         }
     }
 }
+
+#[test]
+fn counts_from_the_day_an_offset_moves_to_the_start() {
+    let reader = Reader::new(Options::default());
+    let today = day("2026-01-07");
+    let every = &reader.repeats("the monday after every sunday", today, today)[0];
+    assert_eq!(every.repeat.starts, day("2026-01-12"));
+    assert_eq!(every.next[..2], [day("2026-01-12"), day("2026-01-19")]);
+    // Every other one keeps to the weeks of the Sunday it starts from.
+    let other = &reader.repeats("the monday after every other sunday", today, today)[0];
+    assert_eq!(other.next[..2], [day("2026-01-12"), day("2026-01-26")]);
+    let days: Vec<Day> = reader.repeat_days(&other.repeat, today, day("2026-02-28")).collect();
+    assert_eq!(days, [day("2026-01-12"), day("2026-01-26"), day("2026-02-09"), day("2026-02-23")]);
+}
+
+#[test]
+fn works_the_days_the_calendar_does() {
+    use say_when::{Calendar, Weekday};
+    let week = vec![
+        Weekday::Sunday,
+        Weekday::Monday,
+        Weekday::Tuesday,
+        Weekday::Wednesday,
+        Weekday::Thursday,
+    ];
+    let calendar = Calendar { working_week: week, ..Calendar::default() };
+    let reader = Reader::new(Options::default()).with_calendar(calendar);
+    let today = day("2026-01-07");
+    let working = &reader.repeats("every working day", today, today)[0];
+    assert_eq!(
+        working.next,
+        [day("2026-01-07"), day("2026-01-08"), day("2026-01-11"), day("2026-01-12")]
+    );
+    assert_eq!(working.how, "Every working day");
+    let first = &reader.repeats("the first working day of every month", today, today)[0];
+    assert_eq!(first.next[0], day("2026-02-01"));
+    assert_eq!(first.how, "Every month on the 1st working day");
+}
+
+#[test]
+fn looks_past_days_off_however_many_there_are() {
+    use say_when::{Calendar, DayOff};
+    let days_off = (6..=20).map(|n| DayOff::new(Day::new(2026, 1, n).unwrap(), None)).collect();
+    let reader =
+        Reader::new(Options::default()).with_calendar(Calendar { days_off, ..Calendar::default() });
+    let every = repeat("FREQ=DAILY;X-SKIP-DAYS-OFF=TRUE;X-OFFSET=-1WORKDAY", "2026-01-02");
+    assert!(reader.repeats_on(&every, day("2026-01-05")));
+    let days: Vec<Day> = reader.repeat_days(&every, day("2026-01-05"), day("2026-01-21")).collect();
+    assert_eq!(days, [day("2026-01-05"), day("2026-01-21")]);
+}
+
+#[test]
+fn reads_no_rule_from_what_isnt_one() {
+    for text in ["12345é", "RRULEé", "é", "RRULE:é", "FREQ=DAILYé"] {
+        assert_eq!(Rule::parse(text), None, "{text}");
+    }
+}

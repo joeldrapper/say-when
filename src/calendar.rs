@@ -192,6 +192,16 @@ impl Working {
         Working::from(Calendar::default())
     }
 
+    /// How many days off there are that would otherwise be worked.
+    pub(crate) fn days_off_count(&self) -> i64 {
+        self.off.len() as i64
+    }
+
+    /// The days of the week that are worked, from Monday.
+    pub(crate) fn working_week(&self) -> Vec<Weekday> {
+        Weekday::ALL.into_iter().filter(|weekday| self.week[*weekday as usize]).collect()
+    }
+
     fn off(&self, day: Day) -> bool {
         self.days.binary_search_by_key(&day, |(day, ..)| *day).is_ok()
     }

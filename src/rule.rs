@@ -36,6 +36,9 @@ use core::fmt;
 pub struct RepeatDays<'a> {
     rule: &'a Rule,
     start: Day,
+    /// The day its periods are counted from: the start, or for one an
+    /// offset moves, the day that moves to it.
+    anchor: Day,
     from: Day,
     to: Day,
     calendar: &'a Working,
@@ -68,7 +71,7 @@ impl Iterator for RepeatDays<'_> {
                 if self.done || self.period > self.last {
                     return None;
                 }
-                let found = rule.period_days(self.start, self.period, self.calendar, self.named);
+                let found = rule.period_days(self.anchor, self.period, self.calendar, self.named);
                 let Some(found) = found else {
                     self.done = true;
                     return None;
@@ -217,11 +220,8 @@ impl Rule {
     /// UTC.
     pub fn parse(text: &str) -> Option<Rule> {
         let text = text.trim();
-        let text = if text.len() >= 6 && text[..6].eq_ignore_ascii_case("RRULE:") {
-            &text[6..]
-        } else {
-            text
-        };
+        let prefixed = text.get(..6).is_some_and(|start| start.eq_ignore_ascii_case("RRULE:"));
+        let text = if prefixed { &text[6..] } else { text };
         let mut rule = Rule::every(Frequency::Daily);
         let mut frequency = None;
         for part in text.split(';').filter(|part| !part.is_empty()) {
@@ -394,6 +394,26 @@ impl Rule {
         let Some(offset) = self.offset else {
             return self.unmoved_days(start, period, calendar, named);
         };
+        let days = self.base_days(start, period, calendar, named)?;
+        let mut days: Vec<Day> =
+            days.into_iter().filter_map(|day| Some(offset.from(day, None, calendar)?.0)).collect();
+        days.sort();
+        days.dedup();
+        Some(days)
+    }
+
+    /// The days in one period an offset moves from: those it's on, or for
+    /// one after a named day that lasts, its last.
+    fn base_days(
+        &self,
+        start: Day,
+        period: i64,
+        calendar: &Working,
+        named: Option<&Called>,
+    ) -> Option<Vec<Day>> {
+        let Some(offset) = self.offset else {
+            return self.unmoved_days(start, period, calendar, named);
+        };
         // After a named day that lasts more than one, like Ramadan, is after
         // its last.
         let after = match offset.shift {
@@ -416,15 +436,37 @@ impl Rule {
             }
             _ => None,
         };
-        let days = match ends {
+        Some(match ends {
             Some(last) => last.into_iter().collect(),
             None => self.unmoved_days(start, period, calendar, named)?,
-        };
-        let mut days: Vec<Day> =
-            days.into_iter().filter_map(|day| Some(offset.from(day, None, calendar)?.0)).collect();
-        days.sort();
-        days.dedup();
-        Some(days)
+        })
+    }
+
+    /// The day an offset moved to the one a schedule starts on, which its
+    /// periods are counted from, so "the Monday after every Sunday" that
+    /// starts on a Monday counts from the Sunday before, and every other
+    /// one keeps to that Sunday's weeks. Looked for as far either way as
+    /// the offset goes, nearest first. `None` when no day of its moves to
+    /// it.
+    fn anchor(
+        &self,
+        start: Day,
+        offset: Offset,
+        periods: i64,
+        calendar: &Working,
+        named: Option<&Called>,
+    ) -> Option<Day> {
+        let each = Rule { interval: 1, count: None, until: None, ..self.clone() };
+        for away in 0..=periods.min(2000) {
+            for period in [-away, away] {
+                for day in each.base_days(start, period, calendar, named).unwrap_or_default() {
+                    if offset.from(day, None, calendar).is_some_and(|(to, _)| to == start) {
+                        return Some(day);
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// The days in one period before an offset moves them.
@@ -539,22 +581,30 @@ impl Rule {
                 Frequency::Monthly => 28,
                 Frequency::Yearly => 365,
             });
-            (offset.most_days() + period - 1) / period + 1
+            (offset.most_days(calendar) + period - 1) / period + 1
         });
-        let before = if from > start { (self.periods_to(start, from) - back).max(0) } else { 0 };
         // The named day it's on, if it's on one, which isn't on any day if
         // the calendar hasn't got it.
         let named = self.on.as_ref().map(|name| crate::named::find(&calendar.named, name));
+        let anchor = self
+            .offset
+            .and_then(|offset| {
+                let periods = back.saturating_mul(i64::from(self.interval_or_one()));
+                self.anchor(start, offset, periods, calendar, named.flatten())
+            })
+            .unwrap_or(start);
+        let before = if from > anchor { (self.periods_to(anchor, from) - back).max(0) } else { 0 };
         RepeatDays {
             rule: self,
             start,
+            anchor,
             from,
             to,
             calendar,
             skipped,
             named: named.flatten(),
             period: if self.count.is_none() { before } else { 0 },
-            last: self.periods_to(start, to.max(start)).saturating_add(back + 1),
+            last: self.periods_to(anchor, to.max(anchor)).saturating_add(back + 1),
             found: Vec::new().into_iter(),
             counted: 0,
             done: matches!(named, Some(None)),
@@ -644,11 +694,11 @@ impl Rule {
     /// The days it's on within a month, as people say them: "the 15th",
     /// "the 1st and 15th", "the last day", "the 2nd Tuesday", "the last
     /// working day".
-    fn day_of_month(&self, start: Day) -> String {
+    fn day_of_month(&self, start: Day, working: &[Weekday]) -> String {
         if !self.by_day.is_empty() {
             if let Some(position) = self.by_set_pos {
-                let kind = if same_days(&self.by_day, &WORKING) {
-                    if self.skips_days_off { "working day" } else { "weekday" }.to_string()
+                let kind = if let Some(kind) = self.kind_of(&self.by_day, working) {
+                    kind.to_string()
                 } else {
                     list(self.by_day.iter().map(|each| each.weekday.name().to_string()).collect())
                 };
@@ -675,11 +725,39 @@ impl Rule {
         format!("the {}", list(said))
     }
 
+    /// What some days of the week are as one, if they're one: working
+    /// days, those of the working week when days off are skipped,
+    /// weekdays, Monday to Friday, when they aren't, or the weekend.
+    fn kind_of(&self, days: &[ByDay], working: &[Weekday]) -> Option<&'static str> {
+        if self.skips_days_off && same_days(days, working) {
+            Some("working day")
+        } else if !self.skips_days_off && same_days(days, &WORKING) {
+            Some("weekday")
+        } else if same_days(days, &[Weekday::Saturday, Weekday::Sunday]) {
+            Some("weekend")
+        } else {
+            None
+        }
+    }
+
     /// How a schedule repeats, as people say it, like "Every 2 weeks on
     /// Tuesday" or "Every month on the last working day", with when it
     /// ends if it does. `starts` is its first day, which says the day a
     /// rule leaves out, and the year of `today` is left off days in it.
+    /// Working days are Monday to Friday: [`crate::Reader::describe_repeat`]
+    /// says them as its calendar works.
     pub fn describe(&self, starts: Day, today: Option<Day>, locale: Locale) -> String {
+        self.describe_in(starts, today, locale, &WORKING)
+    }
+
+    /// How a schedule repeats, with the days of the week that are worked.
+    pub(crate) fn describe_in(
+        &self,
+        starts: Day,
+        today: Option<Day>,
+        locale: Locale,
+        working: &[Weekday],
+    ) -> String {
         let unit = self.frequency.unit();
         let every = if self.interval_or_one() == 1 {
             "Every".to_string()
@@ -702,13 +780,7 @@ impl Rule {
             Frequency::Weekly => {
                 let own = [ByDay::every(starts.weekday())];
                 let weekdays = if self.by_day.is_empty() { &own[..] } else { &self.by_day[..] };
-                let kind = if same_days(weekdays, &WORKING) {
-                    Some(if self.skips_days_off { "working day" } else { "weekday" })
-                } else if same_days(weekdays, &[Weekday::Saturday, Weekday::Sunday]) {
-                    Some("weekend")
-                } else {
-                    None
-                };
+                let kind = self.kind_of(weekdays, working);
                 let names =
                     list(weekdays.iter().map(|each| each.weekday.name().to_string()).collect());
                 match (self.interval_or_one(), kind) {
@@ -718,7 +790,9 @@ impl Rule {
                     (_, None) => format!("{every} weeks on {names}"),
                 }
             }
-            Frequency::Monthly => format!("{every} {units} on {}", self.day_of_month(starts)),
+            Frequency::Monthly => {
+                format!("{every} {units} on {}", self.day_of_month(starts, working))
+            }
             Frequency::Yearly => {
                 let month = self.by_month.unwrap_or(starts.month());
                 let plain = self.by_day.is_empty() && self.by_month_day.len() <= 1;
@@ -728,7 +802,7 @@ impl Rule {
                 } else {
                     format!(
                         "{every} {units} on {} of {}",
-                        self.day_of_month(starts),
+                        self.day_of_month(starts, working),
                         month_name(month)
                     )
                 }
