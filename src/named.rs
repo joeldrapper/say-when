@@ -92,7 +92,7 @@ const DAY: Option<&str> = Some("day");
 /// its month and day.
 type BuiltIn = (&'static [&'static str], Option<&'static str>, &'static str, u32, u32);
 
-const BUILT_IN: [BuiltIn; 12] = [
+const BUILT_IN: [BuiltIn; 13] = [
     (&["christmas", "eve"], None, "Christmas Eve", 12, 24),
     (&["christmas"], DAY, "Christmas Day", 12, 25),
     (&["xmas"], DAY, "Christmas Day", 12, 25),
@@ -105,7 +105,55 @@ const BUILT_IN: [BuiltIn; 12] = [
     (&["st", "patrick"], DAY, "St Patrick’s Day", 3, 17),
     (&["st", "patricks"], DAY, "St Patrick’s Day", 3, 17),
     (&["halloween"], None, "Halloween", 10, 31),
+    (&["guy", "fawkes"], Some("night"), "Guy Fawkes Night", 11, 5),
 ];
+
+/// The other names days go by everywhere English is, for a day a
+/// calendar gives by the first: a phrase can say any of the rest. Only
+/// one way round, as the US Mother's Day isn't Mothering Sunday. A name
+/// two days in a calendar would go by, like "Eid", is said for neither.
+const ALSO: [(&str, &[&str]); 26] = [
+    ("Mothering Sunday", &["Mother’s Day"]),
+    ("Easter Sunday", &["Easter", "Easter Day"]),
+    ("Easter Day", &["Easter", "Easter Sunday"]),
+    ("Shrove Tuesday", &["Pancake Day"]),
+    ("Pancake Day", &["Shrove Tuesday"]),
+    ("Independence Day", &["Fourth of July", "4th of July", "July 4th"]),
+    ("Washington’s Birthday", &["Presidents’ Day", "President’s Day"]),
+    ("Presidents’ Day", &["Washington’s Birthday", "President’s Day"]),
+    ("Martin Luther King Jr. Day", &["Martin Luther King Day", "MLK Day", "MLK"]),
+    ("Birthday of Martin Luther King, Jr.", &["Martin Luther King Day", "MLK Day", "MLK"]),
+    ("Juneteenth National Independence Day", &["Juneteenth"]),
+    ("Remembrance Day", &["Armistice Day"]),
+    ("Labour Day", &["Labor Day"]),
+    ("Labor Day", &["Labour Day"]),
+    ("Thanksgiving Day", &["Thanksgiving"]),
+    ("Thanksgiving", &["Thanksgiving Day"]),
+    ("St Stephen’s Day", &["Boxing Day"]),
+    ("Diwali", &["Deepavali"]),
+    ("Deepavali", &["Diwali"]),
+    ("Lunar New Year", &["Chinese New Year"]),
+    ("Chinese New Year", &["Lunar New Year"]),
+    ("Hanukkah", &["Chanukah", "Hanukah"]),
+    ("Passover", &["Pesach"]),
+    ("Vaisakhi", &["Baisakhi"]),
+    ("Eid al-Fitr", &["Eid"]),
+    ("Eid al-Adha", &["Eid"]),
+];
+
+/// Each way a name is said: its words, and without its apostrophes, so
+/// "mothers day" as well as "mother's day".
+fn said(name: &str) -> impl Iterator<Item = Vec<String>> {
+    let plain = name.replace(['’', '\''], "");
+    [name_words(name), name_words(&plain)].into_iter().flatten()
+}
+
+/// Whether two names are the same said, whatever their case and
+/// apostrophes.
+pub(crate) fn same(one: &str, other: &str) -> bool {
+    let plain = |name: &str| name_words(&name.replace(['’', '\''], ""));
+    plain(one).is_some() && plain(one) == plain(other)
+}
 
 /// The days built in, and then the caller's: each of a day's names as
 /// the words it's said with, its first as it's written back. The
@@ -121,42 +169,66 @@ pub(crate) fn called<'a>(given: impl Iterator<Item = (Day, &'a [String])>) -> Ve
             falls: Falls::On(*month, *day),
         })
         .collect();
-    // Each name the caller has, with every day it's on.
+    // Each day the caller has, by the first of its names, with every way
+    // it's said and every day it's on.
     let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<Day>)> = Vec::new();
     for (day, names) in given {
         let Some(name) = names.first() else { continue };
-        match theirs.iter_mut().find(|(written, ..)| written == name) {
-            Some((_, _, days)) => days.push(day),
+        let at = match theirs.iter().position(|(written, ..)| same(written, name)) {
+            Some(at) => at,
             None => {
-                let mut said: Vec<Vec<String>> = Vec::new();
-                for each in names {
-                    // "mothers day" as well as "mother's day".
-                    let plain = each.replace(['’', '\''], "");
-                    for words in [name_words(each), name_words(&plain)].into_iter().flatten() {
-                        if !said.contains(&words) {
-                            said.push(words);
-                        }
-                    }
-                }
-                theirs.push((name.clone(), said, vec![day]));
+                theirs.push((name.clone(), Vec::new(), Vec::new()));
+                theirs.len() - 1
+            }
+        };
+        let (_, says, days) = &mut theirs[at];
+        days.push(day);
+        for words in names.iter().flat_map(|name| said(name)) {
+            if !says.contains(&words) {
+                says.push(words);
             }
         }
     }
+    // Then the other names each goes by, unless a day's said that way
+    // already.
+    let mut also: Vec<(usize, Vec<String>)> = Vec::new();
+    let mut both: Vec<Vec<String>> = Vec::new();
+    for (at, (_, says, _)) in theirs.iter().enumerate() {
+        let names = ALSO.iter().filter(|(name, _)| said(name).any(|words| says.contains(&words)));
+        for words in names.flat_map(|(_, others)| others.iter().flat_map(|other| said(other))) {
+            if theirs.iter().any(|(_, says, _)| says.contains(&words)) {
+                continue;
+            }
+            match also.iter().find(|(_, said)| *said == words) {
+                Some((of, _)) if *of != at => both.push(words),
+                Some(_) => {}
+                None => also.push((at, words)),
+            }
+        }
+    }
+    also.retain(|(_, words)| !both.contains(words));
     let mut listed: Vec<Called> = Vec::new();
-    for (name, said, mut days) in theirs {
+    let mut others: Vec<Called> = Vec::new();
+    for (at, (name, says, days)) in theirs.iter_mut().enumerate() {
         days.sort();
         days.dedup();
-        for words in said {
-            listed.push(Called {
-                words,
+        let falls = Falls::Listed(days.clone());
+        for words in says.drain(..) {
+            listed.push(Called { words, optional: None, name: name.clone(), falls: falls.clone() });
+        }
+        for (_, words) in also.iter().filter(|(of, _)| *of == at) {
+            others.push(Called {
+                words: words.clone(),
                 optional: None,
                 name: name.clone(),
-                falls: Falls::Listed(days.clone()),
+                falls: falls.clone(),
             });
         }
     }
     listed.sort_by_key(|day| std::cmp::Reverse(day.words.len()));
+    others.sort_by_key(|day| std::cmp::Reverse(day.words.len()));
     found.extend(listed);
+    found.extend(others);
     found
 }
 
@@ -190,5 +262,57 @@ mod tests {
             [(day("2026-07-04"), &independence[..]), (day("2027-07-04"), &independence[..])];
         let all = called(given.into_iter());
         assert_eq!(all.last().unwrap().fixed(), Some((7, 4)));
+    }
+
+    #[test]
+    fn says_a_day_by_the_other_names_it_goes_by() {
+        let day = |text| Day::parse(text).unwrap();
+        let mothering = ["Mothering Sunday".to_string()];
+        let mothers = ["Mother's Day".to_string()];
+        let words = |all: &[Called]| -> Vec<String> {
+            all.iter()
+                .filter(|named| matches!(named.falls, Falls::Listed(_)))
+                .map(|named| format!("{}: {}", named.words.join(" "), named.name))
+                .collect()
+        };
+        // Given one way and then another, it's the same day.
+        let given = [(day("2026-03-15"), &mothering[..]), (day("2027-03-07"), &mothering[..])];
+        let all = called(given.into_iter());
+        assert_eq!(
+            words(&all),
+            [
+                "mothering sunday: Mothering Sunday",
+                "mother day: Mothering Sunday",
+                "mothers day: Mothering Sunday"
+            ]
+        );
+        assert_eq!(all.last().unwrap().day(2027), Some(day("2027-03-07")));
+        // A day said that way already keeps it.
+        let given = [(day("2026-03-15"), &mothering[..]), (day("2026-05-10"), &mothers[..])];
+        let all = called(given.into_iter());
+        assert_eq!(
+            words(&all),
+            [
+                "mothering sunday: Mothering Sunday",
+                "mother day: Mother's Day",
+                "mothers day: Mother's Day"
+            ]
+        );
+        // And the US Mother's Day isn't Mothering Sunday.
+        let all = called([(day("2026-05-10"), &mothers[..])].into_iter());
+        assert_eq!(words(&all), ["mother day: Mother's Day", "mothers day: Mother's Day"]);
+        // Spelt with other apostrophes or capitals, it's one day.
+        let other = ["mother’s day".to_string()];
+        let given = [(day("2026-05-10"), &mothers[..]), (day("2027-05-09"), &other[..])];
+        let all = called(given.into_iter());
+        assert_eq!(all.last().unwrap().day(2027), Some(day("2027-05-09")));
+        // "Eid" is Eid al-Fitr, unless there's Eid al-Adha too.
+        let fitr = ["Eid al-Fitr".to_string()];
+        let adha = ["Eid al-Adha".to_string()];
+        let all = called([(day("2026-03-20"), &fitr[..])].into_iter());
+        assert!(all.iter().any(|named| named.words == ["eid"]));
+        let given = [(day("2026-03-20"), &fitr[..]), (day("2026-05-27"), &adha[..])];
+        let all = called(given.into_iter());
+        assert!(!all.iter().any(|named| named.words == ["eid"]));
     }
 }
