@@ -1,0 +1,19 @@
+# say-when reads days, spans of days, times and how things repeat, written
+# in plain English. say-when-holidays works out public holidays by rule, as
+# calendars for it. Each is a crate with a version of its own.
+[workspace]
+resolver = "3"
+members = ["say-when", "say-when-holidays"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+repository = "https://github.com/joeldrapper/say-when"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

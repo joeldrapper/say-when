@@ -1,0 +1,18 @@
+[package]
+name = "say-when-holidays"
+version = "0.1.0"
+description = "Public holidays by rule, for some places, as calendars for say-when"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/say-when-holidays"
+readme = "README.md"
+keywords = ["holidays", "calendar", "working-days"]
+categories = ["date-and-time"]
+
+[dependencies]
+say-when = { path = "../say-when", version = "0.1.0" }
+
+[lints]
+workspace = true

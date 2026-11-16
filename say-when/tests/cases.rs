@@ -1,0 +1,156 @@
+//! Runs the library's cases: thousands of phrases, each with what it
+//! should read as, a case to a line in `tests/cases/*.jsonl`.
+//!
+//! Where the library reads a phrase differently from how it once did, on
+//! purpose, the case has a `note` saying which of the changes listed in
+//! `cases/README.md` it is. To take what the library reads now as the
+//! answer for every case, having looked at what changed, run `BLESS=1
+//! cargo test -p say-when --features serde --test cases` and read the diff.
+
+use say_when::{
+    Calendar, Day, DayOff, EventContext, Locale, NamedDate, Options, Reader, Time, ZoneNames,
+    read_clock,
+};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Fixture {
+    named: Vec<NamedDate>,
+    zones: ZoneNames,
+    /// Each region's public holidays, as `say-when-holidays` works them out.
+    calendars: HashMap<String, Vec<DayOff>>,
+    fallback_time: Time,
+}
+
+fn directory() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/cases")
+}
+
+fn fixture() -> Fixture {
+    let text = std::fs::read_to_string(directory().join("fixture.json")).unwrap();
+    serde_json::from_str(&text).unwrap()
+}
+
+/// The reader a case is read with: for its `locale`, or Britain, with
+/// the public holidays of its `region`, or England and Wales's, or for
+/// another locale, none unless it says.
+fn reader(case: &Value, fixture: &Fixture) -> Reader {
+    let locale = match case.get("locale") {
+        Some(locale) => serde_json::from_value::<Locale>(locale.clone()).unwrap(),
+        None => Locale::Uk,
+    };
+    let region = case["region"].as_str().or((locale == Locale::Uk).then_some("england-and-wales"));
+    let mut reader = Reader::new(Options::new(locale))
+        .with_named_dates(&fixture.named)
+        .with_zones(fixture.zones.clone());
+    if let Some(region) = region {
+        let days_off =
+            fixture.calendars.get(region).unwrap_or_else(|| panic!("no calendar for {region}"));
+        reader =
+            reader.with_calendar(Calendar { days_off: days_off.clone(), ..Calendar::default() });
+    }
+    match case["about"].as_str() {
+        Some(about) => reader.about(about),
+        None => reader,
+    }
+}
+
+fn day(case: &Value, key: &str) -> Day {
+    Day::parse(case[key].as_str().unwrap_or_default())
+        .unwrap_or_else(|| panic!("no {key} in {case}"))
+}
+
+/// Runs a file of cases through a reader, and fails with the first few
+/// that read differently.
+fn run(name: &str, read: impl Fn(&Value, &str, &Reader, &Fixture) -> Value) {
+    let path = directory().join(format!("{name}.jsonl"));
+    let fixture = fixture();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let bless = std::env::var_os("BLESS").is_some();
+    let mut blessed = String::new();
+    let mut wrong = Vec::new();
+    let mut count = 0;
+    // A reader for each locale, region and what it's about, made once.
+    let mut readers: HashMap<String, Reader> = HashMap::new();
+    for line in text.lines() {
+        let mut case: Value = serde_json::from_str(line).unwrap();
+        let said = case["text"].as_str().unwrap().to_string();
+        let key = format!("{} {} {}", case["locale"], case["region"], case["about"]);
+        let reader = readers.entry(key).or_insert_with(|| reader(&case, &fixture));
+        let out = read(&case, &said, reader, &fixture);
+        count += 1;
+        if case["out"] != out {
+            wrong.push(format!("{said:?}\n  should be {}\n  but was   {out}", case["out"]));
+        }
+        if bless {
+            case["out"] = out;
+            blessed.push_str(&serde_json::to_string(&case).unwrap());
+            blessed.push('\n');
+        }
+    }
+    if bless {
+        std::fs::write(&path, blessed).unwrap();
+        return;
+    }
+    assert!(count > 0, "no cases in {name}");
+    assert!(
+        wrong.is_empty(),
+        "{} of {count} {name} cases differ:\n{}",
+        wrong.len(),
+        wrong[..wrong.len().min(10)].join("\n")
+    );
+}
+
+#[test]
+fn days_and_spans() {
+    run("days", |case, said, reader, _| {
+        let today = day(case, "today");
+        json!({ "days": reader.days(said, today), "span": reader.span(said, today) })
+    });
+}
+
+#[test]
+fn suggestions() {
+    run(
+        "search",
+        |case, said, reader, _| json!({ "days": reader.suggest_days(said, day(case, "today")), "corrected": reader.corrected(said, &[]) }),
+    );
+}
+
+#[test]
+fn repeats() {
+    run("repeats", |case, said, reader, _| {
+        json!(reader.repeats(said, day(case, "from"), day(case, "today")))
+    });
+}
+
+#[test]
+fn events() {
+    run("events", |case, said, reader, fixture| {
+        let today = day(case, "today");
+        let mentions: Vec<&str> = case["mentions"]
+            .as_array()
+            .map(|all| all.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let context = EventContext {
+            today,
+            fallback_day: today,
+            fallback_time: fixture.fallback_time,
+            mentions: &mentions,
+            only_title: false,
+        };
+        json!(reader.event(said, &context))
+    });
+}
+
+#[test]
+fn clocks() {
+    run("clocks", |case, said, _, _| {
+        let after = case["after"].as_str().and_then(Time::parse);
+        json!(read_clock(said, after))
+    });
+}

@@ -1,0 +1,36 @@
+[package]
+name = "say-when"
+version = "0.1.0"
+description = "Reads days, ranges of days, times and how things repeat, written in plain English"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/say-when"
+readme = "README.md"
+keywords = ["date", "parser", "natural-language", "recurrence", "rrule"]
+categories = ["date-and-time", "parser-implementations"]
+
+[features]
+# Lets what's read be written out, and options read in, with serde.
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The cases, and the timing of them, read their fixture with serde, so
+# they're built when the feature's on. Everything else is built without.
+[[test]]
+name = "cases"
+required-features = ["serde"]
+
+[[example]]
+name = "bench"
+required-features = ["serde"]
+
+[lints]
+workspace = true
