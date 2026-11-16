@@ -43,7 +43,7 @@
 		"build": "node scripts/build.ts",
 		"wasm": "node scripts/build.ts --wasm",
 		"test": "node scripts/build.ts && node --test 'test/*.test.ts'",
-		"check": "tsc --noEmit",
+		"check": "node scripts/build.ts --wasm && tsc --noEmit",
 		"lint": "oxfmt --check && oxlint --deny-warnings",
 		"format": "oxfmt",
 		"prepack": "node scripts/build.ts"
