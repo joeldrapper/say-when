@@ -196,6 +196,17 @@ impl Working {
         self.days.binary_search_by_key(&day, |(day, ..)| *day).is_ok()
     }
 
+    /// The day a named day starts on in a year, found by any of its names.
+    pub fn named_day(&self, name: &str, year: i32) -> Option<Day> {
+        crate::named::find(&self.named, name)?.day(year)
+    }
+
+    /// The first and last days of a named day that starts in a year,
+    /// found by any of its names.
+    pub fn named_span(&self, name: &str, year: i32) -> Option<(Day, Day)> {
+        crate::named::find(&self.named, name)?.span(year)
+    }
+
     /// Whether a day is worked: a day of the working week that isn't off.
     pub fn is_working_day(&self, day: Day) -> bool {
         self.week[day.weekday() as usize] && !self.off(day)

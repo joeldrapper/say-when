@@ -671,7 +671,7 @@ impl<'a> Parser<'a> {
     /// The days with names said from a place, each by its index in the
     /// calendar, with where it ends. Only where the word here could start
     /// one, which few words do.
-    fn holidays(&self, at: usize) -> Vec<(usize, usize)> {
+    pub fn holidays(&self, at: usize) -> Vec<(usize, usize)> {
         let first = self.word(at);
         let starts = |word: &str| {
             first.is_some_and(|typed| {

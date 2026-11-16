@@ -13,6 +13,12 @@
 //! it, as RFC 5545 says to, and show the last weekday. It's also read as
 //! `X-BANK-HOLIDAYS=SKIP`, the name it had first.
 //!
+//! And two for what iCalendar can't say: `X-ON=Mother’s Day`, for a yearly
+//! rule on a day in the reader's calendar that falls on a different day
+//! each year, and `X-OFFSET=-WEEKEND`, for each day it comes round to be
+//! moved by an [`Offset`], like the weekend before each Mother's Day.
+//! Calendar apps that don't know them show the rule without them.
+//!
 //! Things repeat at most once a day, so each time one comes round is known
 //! by its day.
 
@@ -20,6 +26,7 @@ use crate::calendar::Working;
 use crate::day::{Day, Weekday};
 use crate::days::ordinal_name;
 use crate::locale::{Locale, month_name};
+use crate::offset::{Offset, Shift};
 use core::fmt;
 
 /// How often a rule comes round.
@@ -97,6 +104,14 @@ pub struct Rule {
     /// Whether the days off in the reader's calendar don't count, as for
     /// "the last working day of the month".
     pub skips_days_off: bool,
+    /// The named day in the reader's calendar a yearly rule is on, by any
+    /// of its names, like "Mother’s Day": on whichever day it falls each
+    /// year, and not in a year the calendar doesn't have it.
+    pub on: Option<String>,
+    /// Where each day it comes round is moved to, like the weekend before
+    /// each Mother's Day. Never a length of time within a day, nor at a
+    /// time.
+    pub offset: Option<Offset>,
 }
 
 impl Rule {
@@ -112,6 +127,8 @@ impl Rule {
             by_month: None,
             by_set_pos: None,
             skips_days_off: false,
+            on: None,
+            offset: None,
         }
     }
 
@@ -128,8 +145,8 @@ impl Rule {
         let mut rule = Rule::every(Frequency::Daily);
         let mut frequency = None;
         for part in text.split(';').filter(|part| !part.is_empty()) {
-            let (name, value) = part.split_once('=')?;
-            let (name, value) = (name.to_ascii_uppercase(), value.to_ascii_uppercase());
+            let (name, said) = part.split_once('=')?;
+            let (name, value) = (name.to_ascii_uppercase(), said.to_ascii_uppercase());
             if name.is_empty() || value.contains('=') {
                 return None;
             }
@@ -184,6 +201,14 @@ impl Rule {
                 // The name it was first written with, still read.
                 "X-BANK-HOLIDAYS" if value == "SKIP" => rule.skips_days_off = true,
                 "X-SKIP-DAYS-OFF" if value == "TRUE" => rule.skips_days_off = true,
+                "X-ON" if !said.trim().is_empty() => rule.on = Some(said.trim().to_string()),
+                "X-OFFSET" => {
+                    let offset: Offset = value.parse().ok()?;
+                    if offset.is_time() || offset.at.is_some() {
+                        return None;
+                    }
+                    rule.offset = Some(offset);
+                }
                 _ => return None,
             }
         }
@@ -193,6 +218,13 @@ impl Rule {
 
     /// Whether it's one of the shapes people make.
     fn shaped(&self) -> bool {
+        if self.on.is_some() {
+            return self.frequency == Frequency::Yearly
+                && self.by_day.is_empty()
+                && self.by_month_day.is_empty()
+                && self.by_month.is_none()
+                && self.by_set_pos.is_none();
+        }
         let nths = self.by_day.iter().any(|each| each.nth != 0);
         let days = !self.by_day.is_empty() || !self.by_month_day.is_empty();
         match self.frequency {
@@ -266,6 +298,37 @@ impl Rule {
     /// The days in one period of the rule, in order, counting periods from
     /// the one it starts in, or `None` past the last day there is.
     fn period_days(&self, start: Day, period: i64, calendar: &Working) -> Option<Vec<Day>> {
+        let Some(offset) = self.offset else { return self.unmoved_days(start, period, calendar) };
+        // After a named day that lasts more than one, like Ramadan, is after
+        // its last.
+        let after = match offset.shift {
+            Shift::By { count, .. } => count > 0,
+            Shift::Weekday { before, .. } | Shift::Weekend { before } => !before,
+        };
+        let ends = match (&self.on, after, self.frequency) {
+            (Some(name), true, Frequency::Yearly) => {
+                let year = i32::try_from(
+                    i64::from(start.year())
+                        .checked_add(period.checked_mul(i64::from(self.interval))?)?,
+                )
+                .ok()?;
+                Some(calendar.named_span(name, year).map(|(_, last)| last))
+            }
+            _ => None,
+        };
+        let days = match ends {
+            Some(last) => last.into_iter().collect(),
+            None => self.unmoved_days(start, period, calendar)?,
+        };
+        let mut days: Vec<Day> =
+            days.into_iter().filter_map(|day| Some(offset.from(day, None, calendar)?.0)).collect();
+        days.sort();
+        days.dedup();
+        Some(days)
+    }
+
+    /// The days in one period before an offset moves them.
+    fn unmoved_days(&self, start: Day, period: i64, calendar: &Working) -> Option<Vec<Day>> {
         let step = period.checked_mul(i64::from(self.interval))?;
         Some(match self.frequency {
             Frequency::Daily => {
@@ -297,7 +360,16 @@ impl Rule {
             Frequency::Yearly => {
                 let year = i32::try_from(i64::from(start.year()).checked_add(step)?).ok()?;
                 Day::new(year, 1, 1)?;
-                self.in_month(year, self.by_month.unwrap_or(start.month()), start, calendar)
+                match &self.on {
+                    Some(name) => calendar
+                        .named_day(name, year)
+                        .filter(|day| self.counts(*day, calendar))
+                        .into_iter()
+                        .collect(),
+                    None => {
+                        self.in_month(year, self.by_month.unwrap_or(start.month()), start, calendar)
+                    }
+                }
             }
         })
     }
@@ -338,7 +410,9 @@ impl Rule {
         // first day asked for is in, rather than going through every one
         // since it began. With one, every period before has to be counted,
         // so it goes through them, and as many again after.
-        let before = if from > start { (self.periods_to(start, from) - 1).max(0) } else { 0 };
+        // An offset can move a day out of its period, as far as a year.
+        let back = if self.offset.is_some() { 2 } else { 1 };
+        let before = if from > start { (self.periods_to(start, from) - back).max(0) } else { 0 };
         let skip = if self.count.is_none() { before } else { 0 };
         for period in skip..before + MOST_PERIODS {
             let Some(found) = self.period_days(start, period, calendar) else { break };
@@ -429,6 +503,13 @@ impl Rule {
         };
         let units = if self.interval == 1 { unit.to_string() } else { format!("{unit}s") };
         let said = match self.frequency {
+            Frequency::Yearly if self.on.is_some() => {
+                let on = self.on.as_deref().unwrap_or_default();
+                match self.offset {
+                    Some(offset) => format!("{every} {units}, {} {on}", offset.describe()),
+                    None => format!("{every} {units} on {on}"),
+                }
+            }
             Frequency::Daily if self.interval == 1 && self.skips_days_off => {
                 "Every day but bank holidays".to_string()
             }
@@ -467,6 +548,13 @@ impl Rule {
                     )
                 }
             }
+        };
+        let said = match self.offset {
+            Some(offset) if self.on.is_none() => match said.split_once(" on ") {
+                Some((every, on)) => format!("{every}, {} {on}", offset.describe()),
+                None => format!("{said}, moved to {}", offset.describe()),
+            },
+            _ => said,
         };
         if let Some(until) = self.until {
             return format!("{said}, until {}", locale.long(until, today));
@@ -594,6 +682,12 @@ impl fmt::Display for Rule {
         }
         if self.skips_days_off {
             write!(f, ";X-SKIP-DAYS-OFF=TRUE")?;
+        }
+        if let Some(on) = &self.on {
+            write!(f, ";X-ON={on}")?;
+        }
+        if let Some(offset) = self.offset {
+            write!(f, ";X-OFFSET={offset}")?;
         }
         Ok(())
     }

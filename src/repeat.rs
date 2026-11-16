@@ -20,6 +20,7 @@
 
 use crate::day::{Day, Weekday};
 use crate::days::{Context, DayExpr, Parser, Unit};
+use crate::offset::Shift;
 use crate::options::{WEEKDAY_WORDS, weekday_alias};
 use crate::rule::{ByDay, Frequency, Rule};
 use crate::words::Token;
@@ -401,6 +402,16 @@ impl RepeatParser<'_> {
                     }
                 }
                 Frequency::Yearly => {
+                    // "every year on mother's day".
+                    for (index, end) in self.parser.holidays(end) {
+                        match self.context.calendar.named.get(index) {
+                            Some(named) if named.fixed().is_none() => {
+                                let on = Some(named.name.clone());
+                                found.push(schedule(Rule { on, ..base.clone() }, end));
+                            }
+                            _ => {}
+                        }
+                    }
                     for (month, day, end) in self.year_days(end) {
                         let rule = Rule {
                             by_month: Some(month),
@@ -452,6 +463,47 @@ impl RepeatParser<'_> {
                     ..Rule::every(Frequency::Yearly)
                 };
                 found.push(schedule(rule, end));
+            }
+        }
+
+        // "every easter", "mother's day every year", "each half term": a
+        // day in the calendar that falls on a different day each year.
+        // "every other easter" too.
+        if let Some(yearly) = every(Frequency::Yearly, counted.unwrap_or(1)) {
+            for (index, end) in self.parser.holidays(days_at) {
+                let Some(named) = self.context.calendar.named.get(index) else { continue };
+                if named.fixed().is_some() {
+                    continue;
+                }
+                let ends = if counted.is_some() { vec![end] } else { self.every_year(end, said) };
+                for end in ends {
+                    let rule = Rule { on: Some(named.name.clone()), ..yearly.clone() };
+                    found.push(schedule(rule, end));
+                }
+            }
+        }
+
+        // "the weekend before each mother's day", "the friday before every
+        // christmas", "2 days before the last working day of every month":
+        // each day it comes round, moved.
+        if at == 0 {
+            let most = self.parser.tokens.len().min(6);
+            for split in 1..most {
+                let said = &self.parser.tokens[..split];
+                let Some(offset) = crate::offset::shift_of(said, false, &self.parser) else {
+                    continue;
+                };
+                if offset.is_time() || matches!(offset.shift, Shift::By { count: 0, .. }) {
+                    continue;
+                }
+                for body in self.bodies(split) {
+                    if body.kind == RepeatKind::Schedule && body.rule.offset.is_none() {
+                        found.push(Body {
+                            rule: Rule { offset: Some(offset), ..body.rule },
+                            ..body
+                        });
+                    }
+                }
             }
         }
 

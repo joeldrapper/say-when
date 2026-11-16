@@ -120,9 +120,10 @@ const DAY: Option<&str> = Some("day");
 /// its month and day.
 type BuiltIn = (&'static [&'static str], Option<&'static str>, &'static str, u32, u32);
 
-const BUILT_IN: [BuiltIn; 13] = [
+const BUILT_IN: [BuiltIn; 14] = [
     (&["christmas", "eve"], None, "Christmas Eve", 12, 24),
     (&["christmas"], DAY, "Christmas Day", 12, 25),
+    (&["xmas", "eve"], None, "Christmas Eve", 12, 24),
     (&["xmas"], DAY, "Christmas Day", 12, 25),
     (&["new", "year", "eve"], None, "New Year’s Eve", 12, 31),
     (&["new", "years", "eve"], None, "New Year’s Eve", 12, 31),
@@ -174,6 +175,14 @@ const ALSO: [(&str, &[&str]); 26] = [
 fn said(name: &str) -> impl Iterator<Item = Vec<String>> {
     let plain = name.replace(['’', '\''], "");
     [name_words(name), name_words(&plain)].into_iter().flatten()
+}
+
+/// The day with a name, said any of the ways it can be.
+pub(crate) fn find<'a>(all: &'a [Called], name: &str) -> Option<&'a Called> {
+    let says: Vec<Vec<String>> = said(name).collect();
+    all.iter()
+        .find(|called| same(&called.name, name))
+        .or_else(|| all.iter().find(|called| says.contains(&called.words)))
 }
 
 /// Whether two names are the same said, whatever their case and

@@ -16290,3 +16290,4 @@
 {"out":{"days":[{"about":null,"day":"2026-12-19","how":null}],"span":{"first":"2026-12-19","kind":"weekend","last":"2026-12-20"}},"text":"the weekend before christmas","today":"2026-01-10"}
 {"out":{"days":[{"about":null,"day":"2026-11-21","how":null}],"span":{"first":"2026-11-21","kind":"weekend","last":"2026-11-22"}},"text":"the weekend after 14 nov","today":"2026-01-10"}
 {"out":{"days":[{"about":null,"day":"2026-11-07","how":null}],"span":{"first":"2026-11-07","kind":"weekend","last":"2026-11-08"}},"text":"the weekend before sat 14 nov","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-12-24","how":"Christmas Eve"}],"span":null},"text":"xmas eve","today":"2026-11-16"}

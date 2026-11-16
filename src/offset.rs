@@ -21,7 +21,8 @@
 
 use crate::calendar::Working;
 use crate::day::{Day, ParseError, Time, Weekday};
-use crate::days::weekend_beside;
+use crate::days::{DayExpr, Parser, SpanExpr, Unit, weekend_beside};
+use crate::words::Token;
 use core::fmt;
 use std::str::FromStr;
 
@@ -221,9 +222,14 @@ pub(crate) fn read(reader: &crate::Reader, text: &str) -> Option<Offset> {
 
 /// How far and which way some words say, with nothing else.
 fn shift(reader: &crate::Reader, text: &str, timed: bool) -> Option<Offset> {
-    use crate::days::{DayExpr, SpanExpr, Unit};
-    use crate::words::{Token, tokens};
-    let said = tokens(text);
+    let said = crate::words::tokens(text);
+    let parser = reader.parser(&said);
+    shift_of(&said, timed, &parser)
+}
+
+/// How far and which way some words say, read as a parser like this one
+/// would.
+pub(crate) fn shift_of(said: &[Token], timed: bool, like: &Parser) -> Option<Offset> {
     let plain: Vec<&str> = said
         .iter()
         .map(|token| match token {
@@ -276,9 +282,9 @@ fn shift(reader: &crate::Reader, text: &str, timed: bool) -> Option<Offset> {
     }
     // The rest as a day is read, said of today, which is taken out after:
     // "3 days before", "the friday before", "the weekend after".
-    let mut said = said;
+    let mut said = said.to_vec();
     said.push(Token::Word("today".to_string()));
-    let parser = reader.parser(&said);
+    let parser = Parser { tokens: &said, ..*like };
     let today = || Box::new(DayExpr::FromToday(0));
     parser.day(0, 0).into_iter().filter(|(_, end)| *end == said.len()).find_map(|(expr, _)| {
         Some(match expr {
@@ -462,7 +468,9 @@ mod tests {
             assert_eq!(offset.describe(), said);
         }
         assert_eq!("+p3d".parse::<Offset>(), Ok(Offset::by(3, OffsetUnit::Day)));
-        for wrong in ["", "P", "-PT", "P3X", "P3–", "-P–", "FR", "-PT1H@09:00", "WEEKEND", "-P1D@9", "--P1D"] {
+        for wrong in
+            ["", "P", "-PT", "P3X", "P3–", "-P–", "FR", "-PT1H@09:00", "WEEKEND", "-P1D@9", "--P1D"]
+        {
             assert!(wrong.parse::<Offset>().is_err(), "{wrong}");
         }
         assert_eq!(Offset::by(1, OffsetUnit::Hour).at(nine), None);
