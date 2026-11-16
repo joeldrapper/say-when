@@ -16257,3 +16257,29 @@
 {"note":"weekday-near","out":{"days":[],"span":null},"text":"wednesday in 2","today":"2026-12-31"}
 {"note":"weekday-near","out":{"days":[{"about":null,"day":"2027-01-13","how":"the Wednesday in 2 weeks"}],"span":null},"text":"wednesday in 2 w","today":"2026-12-31"}
 {"note":"weekday-near","out":{"days":[],"span":null},"text":"friday in 3 days","today":"2026-12-31"}
+{"out":{"days":[{"about":null,"day":"2026-02-18","how":"Ramadan"}],"span":{"first":"2026-02-18","kind":"named","last":"2026-03-19"}},"text":"ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-02-18","how":"Ramadan"}],"span":{"first":"2026-02-18","kind":"named","last":"2026-03-19"}},"text":"ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-03-26","how":"1 week after Thu 19 Mar, the end of Ramadan"}],"span":null},"text":"a week after ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-03-26","how":"1 week after Thu 19 Mar, the end of Ramadan"}],"span":null},"text":"a week after ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-02-11","how":"1 week before Wed 18 Feb, Ramadan"}],"span":null},"text":"a week before ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-02-11","how":"1 week before Wed 18 Feb, Ramadan"}],"span":null},"text":"a week before ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-03-20","how":"the Friday after Thu 19 Mar, the end of Ramadan"}],"span":null},"text":"the friday after ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-03-20","how":"the Friday after Thu 19 Mar, the end of Ramadan"}],"span":null},"text":"the friday after ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-03-19","how":"the end of Ramadan"}],"span":null},"text":"the end of ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-03-19","how":"the end of Ramadan"}],"span":null},"text":"the end of ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-03-19","how":"the last day of Ramadan"}],"span":null},"text":"the last day of ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-03-19","how":"the last day of Ramadan"}],"span":null},"text":"the last day of ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-02-20","how":"the 1st Friday of Ramadan"}],"span":null},"text":"the first friday of ramadan","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-02-20","how":"the 1st Friday of Ramadan"}],"span":null},"text":"the first friday of ramadan","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2027-02-08","how":"Ramadan"}],"span":{"first":"2027-02-08","kind":"named","last":"2027-03-09"}},"text":"ramadan 2027","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2027-02-08","how":"Ramadan"}],"span":{"first":"2027-02-08","kind":"named","last":"2027-03-09"}},"text":"ramadan 2027","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-11-01","how":"2 days after Fri 30 Oct, the end of Half term"}],"span":null},"text":"2 days after half term","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-11-01","how":"2 days after Fri 30 Oct, the end of Half term"}],"span":null},"text":"2 days after half term","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-11-02","how":"the Monday after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the monday after half term","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-11-02","how":"the Monday after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the monday after half term","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-10-25","how":"the day before Mon 26 Oct, Half term"}],"span":null},"text":"the day before half term","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-10-25","how":"the day before Mon 26 Oct, Half term"}],"span":null},"text":"the day before half term","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-10-26","how":"Half term"}],"span":{"first":"2026-10-26","kind":"named","last":"2026-10-30"}},"text":"half term","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-10-26","how":"Half term"}],"span":{"first":"2026-10-26","kind":"named","last":"2026-10-30"}},"text":"half term","today":"2026-03-01"}
+{"out":{"days":[{"about":null,"day":"2026-11-06","how":"the week after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the week after half term","today":"2026-01-10"}
+{"out":{"days":[{"about":null,"day":"2026-11-06","how":"the week after Fri 30 Oct, the end of Half term"}],"span":null},"text":"the week after half term","today":"2026-03-01"}

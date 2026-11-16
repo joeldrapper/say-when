@@ -25,6 +25,7 @@
 use crate::calendar::{Said, Working};
 use crate::day::{Day, Weekday};
 use crate::locale::{Locale, Order, month_name};
+use crate::named::Called;
 use crate::options::{MONTH_WORDS, Named, WEEKDAY_WORDS, weekday_alias};
 use crate::words::Token;
 
@@ -139,6 +140,9 @@ pub(crate) enum SpanExpr {
     Quarter { quarter: u32, year: YearRef },
     /// "2027".
     Year(i32),
+    /// "ramadan", "half term 2027": one of the calendar's named days that
+    /// lasts more than a day.
+    Named { index: usize, year: YearRef },
 }
 
 /// A day, as it was said.
@@ -464,6 +468,18 @@ impl<'a> Parser<'a> {
         if let (Some(year), false) = (self.year(start), said) {
             found.push((SpanExpr::Year(year), start + 1));
         }
+
+        // A day with a name that lasts more than one, like "ramadan" or
+        // "half term", with a year if it's said.
+        if !said {
+            for (index, end) in self.holidays(start) {
+                if self.calendar.named[index].lasts() {
+                    for (year, end) in self.in_year(end) {
+                        found.push((SpanExpr::Named { index, year }, end));
+                    }
+                }
+            }
+        }
         found
     }
 
@@ -641,6 +657,39 @@ impl<'a> Parser<'a> {
         found
     }
 
+    /// The days with names said from a place, each by its index in the
+    /// calendar, with where it ends. Only where the word here could start
+    /// one, which few words do.
+    fn holidays(&self, at: usize) -> Vec<(usize, usize)> {
+        let first = self.word(at);
+        let starts = |word: &str| {
+            first.is_some_and(|typed| {
+                word == typed || (self.last(at) && typed.len() >= 2 && word.starts_with(typed))
+            })
+        };
+        let mut found = Vec::new();
+        for (index, holiday) in self.calendar.named.iter().enumerate() {
+            if !starts(&holiday.words[0]) {
+                continue;
+            }
+            let said = holiday
+                .words
+                .iter()
+                .enumerate()
+                .all(|(offset, word)| self.is(at + offset, &[word.as_str()]));
+            if !said {
+                continue;
+            }
+            // "christmas day" as well as "christmas".
+            let mut end = at + holiday.words.len();
+            if holiday.optional.is_some_and(|word| self.is(end, &[word])) {
+                end += 1;
+            }
+            found.push((index, end));
+        }
+        found
+    }
+
     /// A day on its own: "today", "tomorrow", "fri", "next fri", "9 dec",
     /// "christmas", "the 3rd".
     pub fn atom(&self, at: usize) -> Vec<Parsed<DayExpr>> {
@@ -708,30 +757,7 @@ impl<'a> Parser<'a> {
 
         // Holidays and other days with names: "christmas", "boxing day",
         // "easter", "may bank holiday", with "next year" or a year after.
-        // Only where the word here could start one, which few words do.
-        let first = self.word(at);
-        let starts = |word: &str| {
-            first.is_some_and(|typed| {
-                word == typed || (self.last(at) && typed.len() >= 2 && word.starts_with(typed))
-            })
-        };
-        for (index, holiday) in self.calendar.named.iter().enumerate() {
-            if !starts(&holiday.words[0]) {
-                continue;
-            }
-            let said = holiday
-                .words
-                .iter()
-                .enumerate()
-                .all(|(offset, word)| self.is(at + offset, &[word.as_str()]));
-            if !said {
-                continue;
-            }
-            // "christmas day" as well as "christmas".
-            let mut end = at + holiday.words.len();
-            if holiday.optional.is_some_and(|word| self.is(end, &[word])) {
-                end += 1;
-            }
+        for (index, end) in self.holidays(at) {
             for (year, end) in self.in_year(end) {
                 found.push((DayExpr::Holiday { index, year }, end));
             }
@@ -878,15 +904,29 @@ pub(crate) struct Found {
     pub day: Day,
     pub how: String,
     pub about: Option<String>,
+    /// The last day of one that lasts more than one, like Ramadan, which
+    /// what's after it counts from.
+    pub through: Option<Day>,
 }
 
 impl Found {
     fn plain(day: Day) -> Found {
-        Found { day, how: String::new(), about: None }
+        Found { day, how: String::new(), about: None, through: None }
+    }
+
+    /// For what's after it, its last day, if it has one: "the end of
+    /// Ramadan".
+    fn end_if(self, after: bool) -> Found {
+        match self.through.filter(|_| after) {
+            Some(last) => {
+                Found { day: last, how: format!("the end of {}", self.how), through: None, ..self }
+            }
+            None => self,
+        }
     }
 
     fn how(day: Day, how: String) -> Found {
-        Found { day, how, about: None }
+        Found { day, how, about: None, through: None }
     }
 }
 
@@ -903,6 +943,9 @@ pub enum SpanKind {
     /// A quarter of a year.
     Quarter,
     Year,
+    /// A day with a name that lasts more than one, like Ramadan or half
+    /// term.
+    Named,
 }
 
 /// A span of days worked out: first to last, and what it's called.
@@ -1036,6 +1079,20 @@ impl Context<'_> {
                 })
             }
             SpanExpr::Year(year) => year_span(*year),
+            SpanExpr::Named { index, year } => {
+                let holiday = self.calendar.named.get(*index)?;
+                let (first, last) = self.held(holiday, *year)?;
+                Some(Span { first, last, name: holiday.name.clone(), kind: SpanKind::Named })
+            }
+        }
+    }
+
+    /// The days of a named day that can last more than one: the time
+    /// that's on or next, or the one that starts in a year.
+    fn held(&self, holiday: &Called, year: YearRef) -> Option<(Day, Day)> {
+        match year {
+            YearRef::Coming => holiday.on_or_after(self.today),
+            _ => holiday.span(self.year(year)?),
         }
     }
 
@@ -1082,14 +1139,20 @@ impl Context<'_> {
             }
             DayExpr::Holiday { index, year } => {
                 let holiday = calendar.named.get(*index)?;
-                let day = self.yearly(*year, |year| holiday.day(year))?;
-                Found::how(day, holiday.name.clone())
+                if holiday.lasts() {
+                    let (first, last) = self.held(holiday, *year)?;
+                    let through = (last != first).then_some(last);
+                    Found { through, ..Found::how(first, holiday.name.clone()) }
+                } else {
+                    let day = self.yearly(*year, |year| holiday.day(year))?;
+                    Found::how(day, holiday.name.clone())
+                }
             }
             DayExpr::Named { index, year } => {
                 let named = self.named.get(*index)?;
                 let day =
                     self.yearly(*year, |year| Day::new_within_month(year, named.month, named.day))?;
-                Found { day, how: String::new(), about: named.label.clone() }
+                Found { day, how: String::new(), about: named.label.clone(), through: None }
             }
             DayExpr::Exact(day) => Found::plain((*day)?),
             DayExpr::DayOff { said, month, year } => {
@@ -1112,6 +1175,8 @@ impl Context<'_> {
             }
             DayExpr::Moved { count, unit, the, before, base } => {
                 let from = self.day(base)?;
+                // After one that lasts more than a day is after its last.
+                let from = from.end_if(!*before);
                 let day = moved(from.day, if *before { -*count } else { *count }, *unit, calendar)?;
                 let length =
                     if *the { format!("the {}", unit.name()) } else { plural(*count, unit.name()) };
@@ -1120,6 +1185,7 @@ impl Context<'_> {
                     day,
                     how: join(format!("{words} {}", self.label(from.day)), &from.how),
                     about: from.about.map(|about| format!("{words} {about}")),
+                    through: None,
                 }
             }
             DayExpr::FromNow { count, unit, ago } => {
@@ -1137,6 +1203,7 @@ impl Context<'_> {
                         day,
                         how: join(how, &from.how),
                         about: from.about.map(|about| format!("{words} {about}")),
+                        through: None,
                     }
                 } else {
                     Found::how(day, how)
@@ -1200,6 +1267,7 @@ impl Context<'_> {
             }
             DayExpr::WeekdayBeside { weekday, before, base } => {
                 let from = self.day(base)?;
+                let from = from.end_if(!*before);
                 let day = if *before {
                     from.day.previous_before(*weekday)?
                 } else {
@@ -1211,6 +1279,7 @@ impl Context<'_> {
                     day,
                     how: join(format!("{words} {}", self.label(from.day)), &from.how),
                     about: from.about.map(|about| format!("{words} {about}")),
+                    through: None,
                 }
             }
             DayExpr::WeekdayIn { weekday, within } => {
@@ -1224,6 +1293,8 @@ impl Context<'_> {
                 let far = if *ago { format!("{length} ago") } else { format!("in {length}") };
                 Found::how(day, format!("the {} {far}", weekday.name()))
             }
+            // One with a name is read as its day, and not again here.
+            DayExpr::StartOf(SpanExpr::Named { .. }) => return None,
             DayExpr::StartOf(within) => {
                 let within = self.span(within)?;
                 // A week, or a weekend, says its first day well enough itself.

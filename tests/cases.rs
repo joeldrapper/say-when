@@ -28,11 +28,12 @@ struct Fixture {
     fallback_time: Time,
 }
 
-/// A day with a name, and every day it falls on.
+/// A day with a name, and every day it falls on, or for one that lasts
+/// longer, every time, its first and last days written `first/last`.
 #[derive(Deserialize)]
 struct NamedDays {
     names: Vec<String>,
-    days: Vec<Day>,
+    days: Vec<String>,
 }
 
 fn directory() -> PathBuf {
@@ -65,10 +66,17 @@ fn reader(case: &Value, fixture: &Fixture) -> Reader {
             .clone(),
         None => Vec::new(),
     };
-    let named_days =
-        fixture.named_days.get(&locale).into_iter().flatten().flat_map(|named| {
-            named.days.iter().map(|day| NamedDay::new(*day, named.names.clone()))
-        });
+    let named_days = fixture.named_days.get(&locale).into_iter().flatten().flat_map(|named| {
+        named.days.iter().map(|days| {
+            let day = |text: &str| Day::parse(text).unwrap_or_else(|| panic!("no day {text}"));
+            match days.split_once('/') {
+                Some((first, last)) => {
+                    NamedDay::lasting(day(first), day(last), named.names.clone())
+                }
+                None => NamedDay::new(day(days), named.names.clone()),
+            }
+        })
+    });
     let calendar = Calendar { days_off, named_days: named_days.collect(), ..Calendar::default() };
     let reader = reader.with_calendar(calendar);
     match case["about"].as_str() {

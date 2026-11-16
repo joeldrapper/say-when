@@ -40,8 +40,9 @@ pub fn easter(year: i32) -> Option<Day> {
 pub(crate) enum Falls {
     /// The same month and day every year.
     On(u32, u32),
-    /// The days the caller gave, in order.
-    Listed(Vec<Day>),
+    /// The times the caller gave, in order, each from its first day to
+    /// its last: the same day for one that's a day long.
+    Listed(Vec<(Day, Day)>),
 }
 
 /// A day with a name, found by its words.
@@ -55,16 +56,42 @@ pub(crate) struct Called {
 }
 
 impl Called {
-    /// The day it falls on in a year, the first if there are more.
-    pub fn day(&self, year: i32) -> Option<Day> {
+    /// The days it's on, first and last, the first time it starts in a
+    /// year.
+    pub fn span(&self, year: i32) -> Option<(Day, Day)> {
         match &self.falls {
-            Falls::On(month, day) => Day::new(year, *month, *day),
-            Falls::Listed(days) => {
+            Falls::On(month, day) => Day::new(year, *month, *day).map(|day| (day, day)),
+            Falls::Listed(times) => {
                 let first = Day::new(year, 1, 1)?;
-                let at = days.partition_point(|day| *day < first);
-                days.get(at).copied().filter(|day| day.year() == year)
+                let at = times.partition_point(|(day, _)| *day < first);
+                times.get(at).copied().filter(|(day, _)| day.year() == year)
             }
         }
+    }
+
+    /// The day it starts on, the first time it does in a year.
+    pub fn day(&self, year: i32) -> Option<Day> {
+        self.span(year).map(|(first, _)| first)
+    }
+
+    /// The first time it's on, or still on, on or after a day: like Ramadan
+    /// while it is.
+    pub fn on_or_after(&self, from: Day) -> Option<(Day, Day)> {
+        match &self.falls {
+            Falls::On(..) => {
+                let year = from.year();
+                (year..=year.saturating_add(8))
+                    .find_map(|year| self.span(year).filter(|(day, _)| *day >= from))
+            }
+            Falls::Listed(times) => {
+                times.get(times.partition_point(|(_, last)| *last < from)).copied()
+            }
+        }
+    }
+
+    /// Whether it lasts more than a day, any of the times it's on.
+    pub fn lasts(&self) -> bool {
+        matches!(&self.falls, Falls::Listed(times) if times.iter().any(|(first, last)| first != last))
     }
 
     /// Whether it's on the same month and day every year: one that's
@@ -72,10 +99,11 @@ impl Called {
     pub fn fixed(&self) -> Option<(u32, u32)> {
         match &self.falls {
             Falls::On(month, day) => Some((*month, *day)),
-            Falls::Listed(days) => {
-                let (_, month, date) = days.first()?.ymd();
-                days.iter()
-                    .all(|day| (day.month(), day.day()) == (month, date))
+            Falls::Listed(times) => {
+                let (_, month, date) = times.first()?.0.ymd();
+                times
+                    .iter()
+                    .all(|(day, last)| day == last && (day.month(), day.day()) == (month, date))
                     .then_some((month, date))
             }
         }
@@ -159,7 +187,7 @@ pub(crate) fn same(one: &str, other: &str) -> bool {
 /// the words it's said with, its first as it's written back. The
 /// caller's are given in any order, and found longest first, so "easter
 /// monday" is found before "easter".
-pub(crate) fn called<'a>(given: impl Iterator<Item = (Day, &'a [String])>) -> Vec<Called> {
+pub(crate) fn called<'a>(given: impl Iterator<Item = ((Day, Day), &'a [String])>) -> Vec<Called> {
     let mut found: Vec<Called> = BUILT_IN
         .iter()
         .map(|(words, optional, name, month, day)| Called {
@@ -171,7 +199,7 @@ pub(crate) fn called<'a>(given: impl Iterator<Item = (Day, &'a [String])>) -> Ve
         .collect();
     // Each day the caller has, by the first of its names, with every way
     // it's said and every day it's on.
-    let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<Day>)> = Vec::new();
+    let mut theirs: Vec<(String, Vec<Vec<String>>, Vec<(Day, Day)>)> = Vec::new();
     for (day, names) in given {
         let Some(name) = names.first() else { continue };
         let at = match theirs.iter().position(|(written, ..)| same(written, name)) {
@@ -247,7 +275,10 @@ mod tests {
     fn keeps_the_days_a_caller_gives() {
         let day = |text| Day::parse(text).unwrap();
         let names = ["Mother’s Day".to_string(), "Mothering Sunday".to_string()];
-        let given = [(day("2027-03-07"), &names[..]), (day("2026-03-15"), &names[..])];
+        let given = [
+            ((day("2027-03-07"), day("2027-03-07")), &names[..]),
+            ((day("2026-03-15"), day("2026-03-15")), &names[..]),
+        ];
         let all = called(given.into_iter());
         let mothers: Vec<_> = all.iter().filter(|named| named.name == "Mother’s Day").collect();
         let words: Vec<String> = mothers.iter().map(|named| named.words.join(" ")).collect();
@@ -258,8 +289,10 @@ mod tests {
         assert_eq!(mothers[0].fixed(), None);
 
         let independence = ["Independence Day".to_string()];
-        let given =
-            [(day("2026-07-04"), &independence[..]), (day("2027-07-04"), &independence[..])];
+        let given = [
+            ((day("2026-07-04"), day("2026-07-04")), &independence[..]),
+            ((day("2027-07-04"), day("2027-07-04")), &independence[..]),
+        ];
         let all = called(given.into_iter());
         assert_eq!(all.last().unwrap().fixed(), Some((7, 4)));
     }
@@ -276,7 +309,10 @@ mod tests {
                 .collect()
         };
         // Given one way and then another, it's the same day.
-        let given = [(day("2026-03-15"), &mothering[..]), (day("2027-03-07"), &mothering[..])];
+        let given = [
+            ((day("2026-03-15"), day("2026-03-15")), &mothering[..]),
+            ((day("2027-03-07"), day("2027-03-07")), &mothering[..]),
+        ];
         let all = called(given.into_iter());
         assert_eq!(
             words(&all),
@@ -288,7 +324,10 @@ mod tests {
         );
         assert_eq!(all.last().unwrap().day(2027), Some(day("2027-03-07")));
         // A day said that way already keeps it.
-        let given = [(day("2026-03-15"), &mothering[..]), (day("2026-05-10"), &mothers[..])];
+        let given = [
+            ((day("2026-03-15"), day("2026-03-15")), &mothering[..]),
+            ((day("2026-05-10"), day("2026-05-10")), &mothers[..]),
+        ];
         let all = called(given.into_iter());
         assert_eq!(
             words(&all),
@@ -299,20 +338,51 @@ mod tests {
             ]
         );
         // And the US Mother's Day isn't Mothering Sunday.
-        let all = called([(day("2026-05-10"), &mothers[..])].into_iter());
+        let all = called([((day("2026-05-10"), day("2026-05-10")), &mothers[..])].into_iter());
         assert_eq!(words(&all), ["mother day: Mother's Day", "mothers day: Mother's Day"]);
         // Spelt with other apostrophes or capitals, it's one day.
         let other = ["mother’s day".to_string()];
-        let given = [(day("2026-05-10"), &mothers[..]), (day("2027-05-09"), &other[..])];
+        let given = [
+            ((day("2026-05-10"), day("2026-05-10")), &mothers[..]),
+            ((day("2027-05-09"), day("2027-05-09")), &other[..]),
+        ];
         let all = called(given.into_iter());
         assert_eq!(all.last().unwrap().day(2027), Some(day("2027-05-09")));
         // "Eid" is Eid al-Fitr, unless there's Eid al-Adha too.
         let fitr = ["Eid al-Fitr".to_string()];
         let adha = ["Eid al-Adha".to_string()];
-        let all = called([(day("2026-03-20"), &fitr[..])].into_iter());
+        let all = called([((day("2026-03-20"), day("2026-03-20")), &fitr[..])].into_iter());
         assert!(all.iter().any(|named| named.words == ["eid"]));
-        let given = [(day("2026-03-20"), &fitr[..]), (day("2026-05-27"), &adha[..])];
+        let given = [
+            ((day("2026-03-20"), day("2026-03-20")), &fitr[..]),
+            ((day("2026-05-27"), day("2026-05-27")), &adha[..]),
+        ];
         let all = called(given.into_iter());
         assert!(!all.iter().any(|named| named.words == ["eid"]));
+    }
+
+    #[test]
+    fn keeps_how_long_a_day_lasts() {
+        let day = |text| Day::parse(text).unwrap();
+        let ramadan = ["Ramadan".to_string()];
+        let given = [
+            ((day("2027-02-08"), day("2027-03-09")), &ramadan[..]),
+            ((day("2026-02-18"), day("2026-03-19")), &ramadan[..]),
+        ];
+        let all = called(given.into_iter());
+        let ramadan = all.last().unwrap();
+        assert!(ramadan.lasts());
+        assert_eq!(ramadan.fixed(), None);
+        assert_eq!(ramadan.span(2027), Some((day("2027-02-08"), day("2027-03-09"))));
+        // While it's on, it's the one that's on.
+        assert_eq!(
+            ramadan.on_or_after(day("2026-03-01")),
+            Some((day("2026-02-18"), day("2026-03-19")))
+        );
+        assert_eq!(
+            ramadan.on_or_after(day("2026-03-20")).map(|(first, _)| first),
+            Some(day("2027-02-08"))
+        );
+        assert_eq!(ramadan.on_or_after(day("2027-03-10")), None);
     }
 }

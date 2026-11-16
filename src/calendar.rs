@@ -40,13 +40,18 @@ impl DayOff {
     }
 }
 
-/// A day that's called something, like "Mother’s Day" or "Easter Sunday":
-/// one of the days it falls on.
+/// A day that's called something, like "Mother’s Day" or "Easter Sunday",
+/// one of the times it's on: a day, or more than one, like Ramadan or half
+/// term.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NamedDay {
-    /// The day.
+    /// The day, or for one that lasts longer, its first.
     pub day: Day,
+    /// Its last day, for one that lasts more than one: "a week after
+    /// Ramadan" is a week after this, and "the end of half term" is it.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub last: Option<Day>,
     /// What it's called, the first as it's written back: `["Mother’s Day",
     /// "Mothering Sunday"]`. Each can be said, with its apostrophes or
     /// without them: "mothers day 2027", "a week before mothering sunday".
@@ -56,7 +61,16 @@ pub struct NamedDay {
 impl NamedDay {
     /// A day called something.
     pub fn new<S: Into<String>>(day: Day, names: impl IntoIterator<Item = S>) -> NamedDay {
-        NamedDay { day, names: names.into_iter().map(Into::into).collect() }
+        NamedDay { day, last: None, names: names.into_iter().map(Into::into).collect() }
+    }
+
+    /// Days called something, from the first to the last.
+    pub fn lasting<S: Into<String>>(
+        first: Day,
+        last: Day,
+        names: impl IntoIterator<Item = S>,
+    ) -> NamedDay {
+        NamedDay { last: Some(last), ..NamedDay::new(first, names) }
     }
 }
 
@@ -117,7 +131,11 @@ pub(crate) struct Working {
 
 impl From<Calendar> for Working {
     fn from(calendar: Calendar) -> Working {
-        let named = called(calendar.named_days.iter().map(|named| (named.day, &named.names[..])));
+        let named = called(calendar.named_days.iter().map(|named| {
+            // One that ends before it starts is a day long.
+            let last = named.last.filter(|last| *last > named.day).unwrap_or(named.day);
+            ((named.day, last), &named.names[..])
+        }));
         let mut days: Vec<_> = calendar
             .days_off
             .into_iter()
