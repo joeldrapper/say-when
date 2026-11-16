@@ -84,6 +84,18 @@ fn ordinal_word(word: &str) -> Option<u64> {
     })
 }
 
+/// The number an ordinal word counts, written the same way: "four" for
+/// "fourth", "4" for "4th", and "twenty" for "twentieth", so "twenty
+/// fourth" can be "twenty four".
+pub(crate) fn cardinal(word: &str) -> Option<String> {
+    if let Some(n) = ordinal_figures(word) {
+        return Some(n.to_string());
+    }
+    let n = ordinal_word(word)?;
+    let at = usize::try_from(n).ok()?;
+    ONES.get(at).or_else(|| TENS.get((at / 10).checked_sub(2)?)).map(|word| word.to_string())
+}
+
 /// A number written in figures, like "15", small enough to count with.
 fn figures(word: &str) -> Option<u64> {
     (!word.is_empty() && word.len() <= 15 && word.bytes().all(|byte| byte.is_ascii_digit()))
@@ -246,6 +258,16 @@ mod tests {
         assert_eq!(said("in two years' time"), "in #2 years");
         assert_eq!(said("christmas+3d"), "christmas + #3 d");
         assert_eq!(said("2027-03-01 mon-fri"), "2027-03-01 mon fri");
+    }
+
+    #[test]
+    fn counts_what_an_ordinal_counts() {
+        assert_eq!(cardinal("fourth").as_deref(), Some("four"));
+        assert_eq!(cardinal("4th").as_deref(), Some("4"));
+        assert_eq!(cardinal("twelfth").as_deref(), Some("twelve"));
+        assert_eq!(cardinal("twentieth").as_deref(), Some("twenty"));
+        assert_eq!(cardinal("thirtieth").as_deref(), Some("thirty"));
+        assert_eq!(cardinal("four"), None);
     }
 
     #[test]

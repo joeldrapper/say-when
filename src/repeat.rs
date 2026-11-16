@@ -1,9 +1,12 @@
 //! Reads how something repeats, written out in plain English:
 //!
-//! - every so often: "daily", "every day", "every 3 days", "weekly",
-//!   "fortnightly", "every other week", "every 3 months", "yearly"
+//! - every so often: "daily", "every day", "every 3 days", "every fourth
+//!   day", "alternate days", "once a fortnight", "weekly", "fortnightly",
+//!   "every other week", "every 3 months", "half yearly", "yearly"
 //! - on some weekdays: "every tue", "tuesdays", "mon wed and fri", "every
-//!   other thursday", "weekdays", "weekends", "working days"
+//!   other thursday", "alternate fridays", "every sixth tuesday",
+//!   "weekdays", "weekends", "working days", "every day except sunday",
+//!   "weekdays but friday"
 //! - on days of the month: "the 15th", "1st and 15th of every month", "the
 //!   last day of the month", "the 2nd tuesday", "the last working day"
 //! - on a day of the year: "every 9 dec", "yearly on mum's birthday",
@@ -154,6 +157,16 @@ fn frequency(unit: Unit) -> Option<Frequency> {
     }
 }
 
+/// What a rule that's every so often of a unit takes from the day it starts.
+fn fill(unit: Frequency) -> Option<Fill> {
+    match unit {
+        Frequency::Daily => None,
+        Frequency::Weekly => Some(Fill::Weekday),
+        Frequency::Monthly => Some(Fill::MonthDay),
+        Frequency::Yearly => Some(Fill::YearDay),
+    }
+}
+
 fn every(unit: Frequency, interval: i64) -> Option<Rule> {
     Some(Rule { interval: u32::try_from(interval).ok().filter(|n| *n >= 1)?, ..Rule::every(unit) })
 }
@@ -228,6 +241,38 @@ impl RepeatParser<'_> {
         found
     }
 
+    /// Some days of the week, with any left out after them: "weekdays but
+    /// friday", "every day except weekends", "except for sat and sun". Each
+    /// with where it ends, and as they are when nothing's left out. Never
+    /// all of them, nor a day that wasn't there to leave out.
+    fn except(&self, days: Vec<Weekday>, at: usize) -> Vec<(Vec<Weekday>, usize)> {
+        let mut found = vec![(days.clone(), at)];
+        let from = if self.is(at, &["except", "excluding", "but", "bar", "not"]) {
+            let more = self.is(at, &["except", "but"]) && self.is(at + 1, &["for", "not"]);
+            if more { at + 2 } else { at + 1 }
+        } else if self.is(at, &["apart", "other"]) && self.is(at + 1, &["from", "than"]) {
+            at + 2
+        } else {
+            return found;
+        };
+        // Nothing after it yet, as it's still being typed.
+        if from >= self.parser.tokens.len() {
+            found.push((days, from));
+            return found;
+        }
+        for out in self.weekday_list(from) {
+            if out.working || !out.days.iter().all(|day| days.contains(day)) {
+                continue;
+            }
+            let left: Vec<Weekday> =
+                days.iter().copied().filter(|day| !out.days.contains(day)).collect();
+            if !left.is_empty() {
+                found.push((left, out.at));
+            }
+        }
+        found
+    }
+
     /// How many of a unit: "day", "3 weeks", "a fortnight", "other month".
     fn every(&self, at: usize) -> Vec<(i64, Frequency, usize)> {
         let other = self.is(at, &["other", "alternate"])
@@ -245,18 +290,33 @@ impl RepeatParser<'_> {
 
     /// "daily", "weekly", "fortnightly", "monthly", "quarterly", "yearly".
     fn adverb(&self, at: usize) -> Vec<(i64, Frequency, usize)> {
-        const SAID: [(&[&str], i64, Frequency); 6] = [
-            (&["daily"], 1, Frequency::Daily),
+        // "biweekly" and "bimonthly" can mean twice a week or a month, but
+        // that's no rule without the days, so they're every two; twice a
+        // year can be, and is every six months.
+        const SAID: [(&[&str], i64, Frequency); 10] = [
+            (&["daily", "nightly"], 1, Frequency::Daily),
             (&["weekly"], 1, Frequency::Weekly),
-            (&["fortnightly"], 2, Frequency::Weekly),
+            (&["fortnightly", "biweekly"], 2, Frequency::Weekly),
             (&["monthly"], 1, Frequency::Monthly),
+            (&["bimonthly"], 2, Frequency::Monthly),
             (&["quarterly"], 3, Frequency::Monthly),
+            (&["biannually", "biannual", "semiannually", "semiannual"], 6, Frequency::Monthly),
             (&["yearly", "annually"], 1, Frequency::Yearly),
+            (&["biennially", "biennial"], 2, Frequency::Yearly),
+            (&["triennially", "triennial"], 3, Frequency::Yearly),
         ];
-        SAID.iter()
+        let mut found: Vec<_> = SAID
+            .iter()
             .filter(|(words, ..)| self.is(at, words))
             .map(|(_, n, unit)| (*n, *unit, at + 1))
-            .collect()
+            .collect();
+        // "half yearly", "half-yearly", "six monthly": every six months.
+        let half = self.is(at, &["half"]) && self.is(at + 1, &["yearly"]);
+        let six = self.parser.number(at) == Some(6) && self.is(at + 1, &["monthly"]);
+        if half || six {
+            found.push((6, Frequency::Monthly, at + 2));
+        }
+        found
     }
 
     /// "the 1st and 15th", "15th", "the last day".
@@ -369,40 +429,105 @@ impl RepeatParser<'_> {
     /// What it says before when it starts and stops.
     fn bodies(&self, at: usize) -> Vec<Body> {
         let mut found = Vec::new();
+        // "once a week", "once a fortnight", "once per month", "once every
+        // 3 weeks": every so often, and no more than that, so not "once a
+        // tuesday".
+        let once = self.is(at, &["once"]).then(|| match self.parser.tokens.get(at + 1) {
+            Some(Token::Number(1, _)) => Some(at + 1),
+            _ if self.is(at + 1, &["per"]) => Some(at + 2),
+            _ if self.is(at + 1, &["every", "each"]) => Some(at + 1),
+            _ => None,
+        });
+        if let Some(once) = once {
+            let Some(from) = once else { return found };
+            if self.is(from, &["every", "each"]) {
+                return self.bodies(from);
+            }
+            return self
+                .every(from)
+                .into_iter()
+                .filter_map(|(n, unit, end)| {
+                    let fill = fill(unit);
+                    Some(Body { at: end, kind: RepeatKind::Schedule, rule: every(unit, n)?, fill })
+                })
+                .collect();
+        }
         let said = self.is(at, &["every", "each", "on"]);
+        // "alternate days", "on alternate tuesdays": "every other", with
+        // "every" left unsaid.
+        let alternate = !said && self.is(at, &["alternate"]);
         let lead = if said { at + 1 } else { at };
         let schedule =
             |rule: Rule, at: usize| Body { at, kind: RepeatKind::Schedule, rule, fill: None };
 
         // "every tue", "every other thursday", "tuesdays", "mon wed fri",
-        // "weekdays".
-        let other = self.is(lead, &["other", "alternate"])
-            || matches!(self.parser.tokens.get(lead), Some(Token::Ordinal(2)));
-        let counted = if other { Some(2) } else { self.parser.number(lead) }.filter(|_| said);
+        // "weekdays", "every third tuesday", "every weekday but friday".
+        let nth = match self.parser.tokens.get(lead) {
+            Some(Token::Ordinal(n @ 2..)) => i64::try_from(*n).ok(),
+            _ => None,
+        };
+        let other = self.is(lead, &["other", "alternate"]);
+        let counted = if other { Some(2) } else { nth.or(self.parser.number(lead)) }
+            .filter(|_| said || alternate);
         let days_at = if counted.is_some() { lead + 1 } else { lead };
+        // The 3rd to 5th Tuesday is a day of each month too, and that's
+        // what "every third tuesday" says first, as "the third tuesday" of
+        // each month; every third week on Tuesday is the one after it.
+        let monthly_first = nth.is_some_and(|n| (3..=5).contains(&n));
+        let mut weeks_apart = Vec::new();
         if let Some(weekly) = every(Frequency::Weekly, counted.unwrap_or(1)) {
             for days in self.weekday_list(days_at) {
-                let rule = Rule {
-                    by_day: days.days.iter().copied().map(ByDay::every).collect(),
-                    skips_days_off: days.working,
-                    ..weekly.clone()
-                };
-                found.push(schedule(rule, days.at));
+                // Every third weekday is every third working day, if
+                // anything, not every three weeks from Monday to Friday.
+                let weekdays = days.working || days.days.len() == WORKING.len();
+                if nth.is_some_and(|n| n > 2) && weekdays {
+                    continue;
+                }
+                for (left, at) in self.except(days.days, days.at) {
+                    let rule = Rule {
+                        by_day: left.into_iter().map(ByDay::every).collect(),
+                        skips_days_off: days.working,
+                        ..weekly.clone()
+                    };
+                    if monthly_first {
+                        weeks_apart.push(schedule(rule, at));
+                    } else {
+                        found.push(schedule(rule, at));
+                    }
+                }
             }
         }
 
         // "every 3 weeks", "every other month", "daily", each optionally
         // on some days: "every 2 weeks on tue", "monthly on the 15th".
-        let often = if said { self.every(lead) } else { Vec::new() };
+        let often = if said || alternate { self.every(lead) } else { Vec::new() };
         for (n, unit, end) in often.into_iter().chain(self.adverb(at)) {
             let Some(base) = every(unit, n) else { continue };
-            let fill = match unit {
-                Frequency::Daily => None,
-                Frequency::Weekly => Some(Fill::Weekday),
-                Frequency::Monthly => Some(Fill::MonthDay),
-                Frequency::Yearly => Some(Fill::YearDay),
-            };
-            found.push(Body { at: end, kind: RepeatKind::Schedule, rule: base.clone(), fill });
+            // "every day except sunday", "daily but weekends": the days of
+            // the week that are left.
+            if unit == Frequency::Daily && n == 1 {
+                let week = [&WORKING[..], &[Weekday::Saturday, Weekday::Sunday]].concat();
+                for (days, at) in self.except(week.clone(), end) {
+                    // With nothing left out yet, as it's typed, every day.
+                    let rule = if days == week {
+                        base.clone()
+                    } else {
+                        Rule {
+                            by_day: days.into_iter().map(ByDay::every).collect(),
+                            ..Rule::every(Frequency::Weekly)
+                        }
+                    };
+                    if at > end {
+                        found.push(schedule(rule, at));
+                    }
+                }
+            }
+            found.push(Body {
+                at: end,
+                kind: RepeatKind::Schedule,
+                rule: base.clone(),
+                fill: fill(unit),
+            });
             // "on" was left out with the other words that always can be.
             match unit {
                 Frequency::Daily => {}
@@ -528,8 +653,11 @@ impl RepeatParser<'_> {
             }
         }
 
+        // Every third week on Tuesday, after every month's third Tuesday.
+        found.extend(weeks_apart);
+
         // "3 weeks after done", "a month after it's done".
-        if !said {
+        if !said && !alternate {
             for (n, unit, end) in self.every(at) {
                 if let (Some(after), Some(rule)) = (self.after_done(end), every(unit, n)) {
                     found.push(Body { at: after, kind: RepeatKind::After, rule, fill: None });
@@ -688,9 +816,48 @@ fn end(starts: Day, (n, unit): (i64, Unit), calendar: &Working) -> Option<Day> {
     crate::days::moved(starts, n, unit, calendar)?.add_days(-1)
 }
 
+/// The words a unit is said with, as `Parser::unit` reads them, but for
+/// working days and weekdays, which aren't repeated by.
+const UNIT_WORDS: [&str; 19] = [
+    "day",
+    "days",
+    "d",
+    "week",
+    "weeks",
+    "w",
+    "wk",
+    "wks",
+    "fortnight",
+    "fortnights",
+    "month",
+    "months",
+    "mo",
+    "mos",
+    "year",
+    "years",
+    "y",
+    "yr",
+    "yrs",
+];
+
+/// Whether a word says a unit to repeat by, or starts one when it's the
+/// last word, still being typed. Not one that could as well be a day of
+/// the week, like "mo", which "every 3rd mo" might go on to be "monday".
+fn unit_word(word: &str, last: bool) -> bool {
+    let weekday = weekday_alias(word).is_some()
+        || WEEKDAY_WORDS.iter().any(|(name, _)| word.len() >= 2 && name.starts_with(word));
+    let typing = last && word.len() >= 2;
+    !weekday
+        && (UNIT_WORDS.contains(&word)
+            || (typing && UNIT_WORDS.iter().any(|unit| unit.starts_with(word))))
+}
+
 /// What's typed, as the grammar reads it: without "repeat" or "repeats" at
-/// its start, and with "10 times" as "10 x", since "times" is one of the
-/// words that can always be left out.
+/// its start, with "10 times" as "10 x", since "times" is one of the words
+/// that can always be left out, and with an ordinal right before a unit
+/// after "every" as the number it counts: "every fourth day" is "every four
+/// day", every four days. Only right before it, since "the" and "of" are
+/// left out too, and "every fifth of the month" is a day of each month.
 pub(crate) fn said(text: &str) -> String {
     let lower = text.trim_start().to_lowercase();
     let rest = ["repeats", "repeat"]
@@ -699,16 +866,52 @@ pub(crate) fn said(text: &str) -> String {
             lower.strip_prefix(word).filter(|rest| !rest.starts_with(char::is_alphanumeric))
         })
         .unwrap_or(&lower);
-    let mut out = String::with_capacity(rest.len());
-    let mut word = String::new();
-    for c in rest.chars().chain([' ']) {
+    // Each word, with what comes after it before the next.
+    let mut words: Vec<(String, String)> = vec![(String::new(), String::new())];
+    for c in rest.chars() {
+        let (word, between) = words.last_mut().expect("there's always one");
         if c.is_alphanumeric() || c == '_' {
-            word.push(c);
-            continue;
+            if !between.is_empty() {
+                words.push((c.to_string(), String::new()));
+            } else {
+                word.push(c);
+            }
+        } else {
+            between.push(c);
         }
-        out.push_str(if word == "time" || word == "times" { "x" } else { &word });
-        word.clear();
-        out.push(c);
+    }
+    let plain = |at: usize| words.get(at).map(|(word, _)| word.as_str());
+    let spaced = |at: usize| words.get(at).is_some_and(|(_, between)| between.trim().is_empty());
+    let mut out = String::with_capacity(rest.len());
+    for (at, (word, between)) in words.iter().enumerate() {
+        let counted = || {
+            let every = |at: usize| matches!(plain(at), Some("every" | "each"));
+            // "every twenty-fourth day", where "twenty" comes between.
+            let tens = |at: usize| {
+                plain(at)
+                    .and_then(crate::words::number_word)
+                    .is_some_and(|n| n >= 20 && n % 10 == 0)
+            };
+            let compound = at > 1 && tens(at - 1) && every(at - 2);
+            let after_every = at > 0 && (every(at - 1) || compound);
+            let last = at + 2 == words.len();
+            let unit = plain(at + 1).is_some_and(|next| unit_word(next, last))
+                && spaced(at)
+                && plain(at + 2) != Some("of");
+            if !after_every || !unit {
+                return None;
+            }
+            // Not "every first day", which is no more than every day.
+            crate::words::cardinal(word).filter(|n| compound || (n != "one" && n != "1"))
+        };
+        match word.as_str() {
+            "time" | "times" => out.push('x'),
+            _ => match counted() {
+                Some(n) => out.push_str(&n),
+                None => out.push_str(word),
+            },
+        }
+        out.push_str(between);
     }
     out
 }

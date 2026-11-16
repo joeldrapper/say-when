@@ -387,6 +387,17 @@ impl<'a> Parser<'a> {
         self.number(at).filter(|n| (1900..=2200).contains(n)).map(|n| n as i32)
     }
 
+    /// A year written with two figures after a day that has no day of the
+    /// month to fill, as in "christmas 28" or "25 dec 28": this century's.
+    /// Not one up to 24, which could as well be the hour, as in "christmas
+    /// 10", and is a year gone by.
+    fn short_year(&self, at: usize) -> Option<i32> {
+        match self.tokens.get(at)? {
+            Token::Number(n @ 25..=99, text) if text.len() == 2 => Some(2000 + *n as i32),
+            _ => None,
+        }
+    }
+
     /// Which year something's in, by what follows it: nothing, a year
     /// written out, or how many years on.
     fn in_year(&self, at: usize) -> Vec<Parsed<YearRef>> {
@@ -396,6 +407,16 @@ impl<'a> Parser<'a> {
         }
         found
             .extend(self.years_on(at).into_iter().map(|(years, end)| (YearRef::Ahead(years), end)));
+        found
+    }
+
+    /// Which year a day with a name is in: as `in_year`, or in two figures,
+    /// as in "christmas 28", since it has no day of the month to be.
+    fn named_year(&self, at: usize) -> Vec<Parsed<YearRef>> {
+        let mut found = self.in_year(at);
+        if let Some(year) = self.short_year(at) {
+            found.push((YearRef::Exact(year), at + 1));
+        }
         found
     }
 
@@ -485,7 +506,7 @@ impl<'a> Parser<'a> {
         if !said {
             for (index, end) in self.holidays(start) {
                 if self.calendar.named[index].lasts() {
-                    for (year, end) in self.in_year(end) {
+                    for (year, end) in self.named_year(end) {
                         found.push((SpanExpr::Named { index, year }, end));
                     }
                 }
@@ -574,6 +595,26 @@ impl<'a> Parser<'a> {
                             after,
                         ));
                     }
+                }
+            }
+        }
+        // "the fourth day after christmas", "the 3rd working day before
+        // it": counted as "4 days after", since the first day after is the
+        // day after. Days only: "the second week after easter" is a week.
+        if let Some(Token::Ordinal(nth @ 2..)) = self.tokens.get(at)
+            && let Ok(count) = i64::try_from(*nth)
+        {
+            for (unit, times, end) in self.unit(at + 1) {
+                let days = matches!(unit, Unit::Day | Unit::WorkingDay | Unit::Weekday);
+                if times != 1 || !days || !self.is(end, &["before", "after", "from"]) {
+                    continue;
+                }
+                let before = self.is(end, &["before"]);
+                for (base, end) in self.day(end + 1, depth + 1) {
+                    found.push((
+                        DayExpr::Moved { count, unit, the: false, before, base: Box::new(base) },
+                        end,
+                    ));
                 }
             }
         }
@@ -773,7 +814,8 @@ impl<'a> Parser<'a> {
         ];
         for (day, month) in pairs.into_iter().flatten() {
             let end = at + 2;
-            match self.year(end) {
+            // "25 dec 28", "dec 25, '28".
+            match self.year(end).or(self.short_year(end)) {
                 Some(year) => {
                     found.push((DayExpr::Date { month, day, year: YearRef::Exact(year) }, end + 1))
                 }
@@ -795,7 +837,7 @@ impl<'a> Parser<'a> {
         // Holidays and other days with names: "christmas", "boxing day",
         // "easter", "may bank holiday", with "next year" or a year after.
         for (index, end) in self.holidays(at) {
-            for (year, end) in self.in_year(end) {
+            for (year, end) in self.named_year(end) {
                 found.push((DayExpr::Holiday { index, year }, end));
             }
         }
@@ -825,7 +867,7 @@ impl<'a> Parser<'a> {
             }
             for end in ends {
                 if self.is(end, &whats) {
-                    for (year, end) in self.in_year(end + 1) {
+                    for (year, end) in self.named_year(end + 1) {
                         found.push((DayExpr::Named { index, year }, end));
                     }
                 }
@@ -863,7 +905,7 @@ impl<'a> Parser<'a> {
                     continue;
                 }
                 if let Some(said) = self.calendar.naming(&words, self.last(end - 1)) {
-                    for (year, end) in self.in_year(end) {
+                    for (year, end) in self.named_year(end) {
                         found.push((DayExpr::DayOff { said: said.clone(), month, year }, end));
                     }
                 }

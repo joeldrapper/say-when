@@ -11,8 +11,8 @@ plain English, the way people type them into a date picker or a calendar:
 - **a search, as it's typed**: "t" is Today, Tomorrow, Tuesday and Thursday
 - **a time of day**: "1pm", "13:30", "half three", "quarter to 5", "noon"
 - **how something repeats**, as an iCalendar RRULE: "every other thursday",
-  "the last working day of the month", "weekly until christmas", "the
-  weekend before each mother's day"
+  "every fourth day", "weekdays but friday", "the last working day of the
+  month", "weekly until christmas", "the weekend before each mother's day"
 - **where something is from a day**, like a reminder from its event: "3
   days before", "the friday before", "the day before at 9am", "an hour
   before"
