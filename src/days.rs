@@ -501,6 +501,32 @@ impl<'a> Parser<'a> {
         }
         let mut found = Vec::new();
 
+        // "the last working day before christmas", "the final friday before
+        // it", "the first monday after easter": the nearest one, as with
+        // neither word.
+        let nearest = match self.tokens.get(at) {
+            Some(Token::Ordinal(1)) => Some(false),
+            _ if self.exactly(at, "last") || self.exactly(at, "final") => Some(true),
+            _ => None,
+        };
+        if let Some(before) = nearest {
+            for (day, end) in self.day(at + 1, depth + 1) {
+                // Of days, not weeks or months, which have a first and
+                // last of their own.
+                let beside = match &day {
+                    DayExpr::Moved { count: 1, the: true, before: said, unit, .. } => {
+                        *said == before
+                            && matches!(unit, Unit::Day | Unit::WorkingDay | Unit::Weekday)
+                    }
+                    DayExpr::WeekdayBeside { before: said, .. } => *said == before,
+                    _ => false,
+                };
+                if beside {
+                    found.push((day, end));
+                }
+            }
+        }
+
         // "3 working days before christmas", "2 weeks after next friday",
         // "a fortnight from tuesday", and with no number, "the day before".
         let n = self.number(at);

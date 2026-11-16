@@ -16291,3 +16291,12 @@
 {"out":{"days":[{"about":null,"day":"2026-11-21","how":null}],"span":{"first":"2026-11-21","kind":"weekend","last":"2026-11-22"}},"text":"the weekend after 14 nov","today":"2026-01-10"}
 {"out":{"days":[{"about":null,"day":"2026-11-07","how":null}],"span":{"first":"2026-11-07","kind":"weekend","last":"2026-11-08"}},"text":"the weekend before sat 14 nov","today":"2026-01-10"}
 {"out":{"days":[{"about":null,"day":"2026-12-24","how":"Christmas Eve"}],"span":null},"text":"xmas eve","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-24","how":"the working day before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the last working day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-24","how":"the working day before Fri 25 Dec, Christmas Day"}],"span":null},"text":"last working day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-18","how":"the Friday before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the last friday before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-29","how":"the working day after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the first working day after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-28","how":"the Monday after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the first monday after christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-30","how":"the weekday before Thu 31 Dec, New Year’s Eve"}],"span":null},"text":"the last weekday before new year's eve","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2027-01-04","how":"the working day after Fri 1 Jan 2027, New Year’s Day"}],"span":null},"text":"the first working day after new year's day","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-24","how":"the working day before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final working day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-18","how":"the Friday before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final friday before christmas","today":"2026-11-16"}
