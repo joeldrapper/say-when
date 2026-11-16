@@ -6,11 +6,16 @@ plain English, the way people type them into a date picker or a calendar:
 - **a day**: "tomorrow", "next fri", "9 dec", "the last working day of
   november", "3 working days before christmas", "a fortnight after next
   friday", "mum's birthday"
-- **a span of days**: "next week", "the weekend", "november", "q3 2027"
+- **a span of days**: "next week", "the weekend", "november", "q3 2027",
+  "the weekend before mother's day", "ramadan"
 - **a search, as it's typed**: "t" is Today, Tomorrow, Tuesday and Thursday
 - **a time of day**: "1pm", "13:30", "half three", "quarter to 5", "noon"
 - **how something repeats**, as an iCalendar RRULE: "every other thursday",
-  "the last working day of the month", "weekly until christmas"
+  "the last working day of the month", "weekly until christmas", "the
+  weekend before each mother's day"
+- **where something is from a day**, like a reminder from its event: "3
+  days before", "the friday before", "the day before at 9am", "an hour
+  before"
 - **an event typed as a sentence**: "Lunch with Priya tomorrow at 1 at
   Monmouth", "Standup every weekday at 9:30 for 15 mins"
 
@@ -30,6 +35,21 @@ assert_eq!(read[0].how.as_deref(), Some("the day before Mon 30 Nov, the last wor
 let repeats = reader.repeats("every other thursday until christmas", today, today);
 assert_eq!(repeats[0].repeat.rule.to_string(), "FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;UNTIL=20261225");
 assert_eq!(repeats[0].how, "Every 2 weeks on Thursday, until 25 December");
+```
+
+A reminder keeps what was said, not the day it lands on, so it follows
+its event when the event moves:
+
+```rust
+use say_when::{Day, Options, Reader, Time};
+
+let reader = Reader::new(Options::default());
+let offset = reader.offset("the day before at 9am").unwrap();
+assert_eq!(offset.to_string(), "-P1D@09:00");
+
+let event = Day::new(2026, 12, 3).unwrap();
+let (day, time) = reader.offset_from(&offset, event, Time::new(14, 0)).unwrap();
+assert_eq!((day.to_string(), time), ("2026-12-02".to_string(), Time::new(9, 0)));
 ```
 
 `cargo run --example read -- "next friday"` tries a phrase.
@@ -53,12 +73,15 @@ holidays. The caller says:
   holidays can't be worked out by rule, as governments add and move
   them, so the library has none of its own: give it a list kept from a
   source you trust. The days with names can be said too: "easter
-  monday", "a week before mother's day", "thanksgiving 2027". Only the
-  few on the same day every year and said everywhere English is are
-  built in (Christmas, New Year, Valentine's Day, St Patrick's Day and
-  Halloween), as which others are said depends on where, and many move
-  from year to year. `easter` works out Easter Sunday, for the days that
-  hang on it;
+  monday", "a week before mother's day", "thanksgiving 2027", by any of
+  their names or the others they go by everywhere ("mother's day" for
+  Mothering Sunday). One can last more than a day, like Ramadan or half
+  term, and what's after it counts from its last: "a week after
+  ramadan". Only the few on the same day every year and said everywhere
+  English is are built in (Christmas, New Year, Valentine's Day, St
+  Patrick's Day, Halloween and Guy Fawkes Night), as which others are
+  said depends on where, and many move from year to year. `easter` works
+  out Easter Sunday, for the days that hang on it;
 - **named dates**, for days only it knows by name, like people's birthdays
   (`Reader::with_named_dates`);
 - **the names time zones go by**, for an event's sentence to say which its
