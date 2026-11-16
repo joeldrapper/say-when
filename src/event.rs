@@ -1880,10 +1880,12 @@ fn hear(reader: &Reader, text: &str, context: &EventContext, event: bool) -> Opt
     for index in 1..sentence.words.len() {
         let after = sentence.role(index - 1).filter(|role| role.is_when());
         let ends = sentence.role(index + 1).is_none_or(|role| role.is_when());
-        if sentence.free(index) && sentence.words[index].plain.is_empty() && ends {
-            if let Some(after) = after {
-                sentence.words[index].role = after;
-            }
+        if sentence.free(index)
+            && sentence.words[index].plain.is_empty()
+            && ends
+            && let Some(after) = after
+        {
+            sentence.words[index].role = after;
         }
     }
     let mut title = sentence.title();
