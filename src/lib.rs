@@ -25,7 +25,7 @@ pub use named::easter;
 pub use offset::{Offset, OffsetUnit, Shift};
 pub use options::{NamedDate, Options, ZoneNames};
 pub use repeat::{Repeat, RepeatKind};
-pub use rule::{ByDay, Frequency, Rule};
+pub use rule::{ByDay, Frequency, RepeatDays, Rule};
 
 use calendar::Working;
 use days::{Context, Parser};
@@ -283,9 +283,38 @@ impl Reader {
             // short of one every few years.
             RepeatKind::Schedule => {
                 let to = from.add_months(12 * 30).unwrap_or(Day::MAX);
-                repeat.rule.days(repeat.starts, from, to, many, &self.calendar)
+                self.repeat_days(repeat, from, to).take(many).collect()
             }
         }
+    }
+
+    /// Each day a repeat on a schedule comes round on from one day to
+    /// another, both included, in order, but for those it skips: for a
+    /// calendar's week or month. However far apart they are, the days are
+    /// worked out as they're asked for. One after it's done has no days of
+    /// its own.
+    pub fn repeat_days<'a>(&'a self, repeat: &'a Repeat, from: Day, to: Day) -> RepeatDays<'a> {
+        match repeat.kind {
+            RepeatKind::After => RepeatDays::none(&repeat.rule, &self.calendar),
+            RepeatKind::Schedule => {
+                repeat.rule.each_day(repeat.starts, from, to, &self.calendar, &repeat.skipped)
+            }
+        }
+    }
+
+    /// Whether a repeat on a schedule comes round on a day.
+    pub fn repeats_on(&self, repeat: &Repeat, day: Day) -> bool {
+        self.repeat_days(repeat, day, day).next().is_some()
+    }
+
+    /// The last day a repeat on a schedule comes round on, if it stops,
+    /// after so many times or on a day.
+    pub fn last_repeat_day(&self, repeat: &Repeat) -> Option<Day> {
+        let rule = &repeat.rule;
+        if repeat.kind == RepeatKind::After || (rule.count.is_none() && rule.until.is_none()) {
+            return None;
+        }
+        self.repeat_days(repeat, repeat.starts, rule.until.unwrap_or(Day::MAX)).last()
     }
 
     /// A time of day typed on its own, as [`read_clock`] reads it: "3pm",

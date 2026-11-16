@@ -30,6 +30,75 @@ use crate::named::Called;
 use crate::offset::{Offset, Shift};
 use core::fmt;
 
+/// The days a repeat comes round on, in order, from
+/// [`crate::Reader::repeat_days`].
+#[derive(Clone, Debug)]
+pub struct RepeatDays<'a> {
+    rule: &'a Rule,
+    start: Day,
+    from: Day,
+    to: Day,
+    calendar: &'a Working,
+    skipped: &'a [Day],
+    named: Option<&'a Called>,
+    /// The next period to look in, and the last there's any need to.
+    period: i64,
+    last: i64,
+    found: std::vec::IntoIter<Day>,
+    counted: u32,
+    done: bool,
+}
+
+impl RepeatDays<'_> {
+    /// None at all.
+    pub(crate) fn none<'a>(rule: &'a Rule, calendar: &'a Working) -> RepeatDays<'a> {
+        RepeatDays { done: true, ..rule.each_day(Day::MIN, Day::MIN, Day::MIN, calendar, &[]) }
+    }
+}
+
+impl Iterator for RepeatDays<'_> {
+    type Item = Day;
+
+    fn next(&mut self) -> Option<Day> {
+        let rule = self.rule;
+        loop {
+            let Some(day) = self.found.next() else {
+                if self.done || self.period > self.last {
+                    return None;
+                }
+                let found = rule.period_days(self.start, self.period, self.calendar, self.named);
+                let Some(found) = found else {
+                    self.done = true;
+                    return None;
+                };
+                self.found = found.into_iter();
+                self.period += 1;
+                continue;
+            };
+            if day < self.start {
+                continue;
+            }
+            if day > self.to || rule.until.is_some_and(|until| day > until) {
+                self.done = true;
+                self.found = Vec::new().into_iter();
+                return None;
+            }
+            // Those skipped count, as for iCalendar's EXDATE.
+            self.counted += 1;
+            if rule.count.is_some_and(|count| self.counted >= count) {
+                self.done = true;
+                self.found = Vec::new().into_iter();
+            }
+            if day >= self.from && !self.skipped.contains(&day) {
+                return Some(day);
+            }
+            if self.done {
+                return None;
+            }
+        }
+    }
+}
+
 /// How often a rule comes round.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[non_exhaustive]
@@ -423,44 +492,42 @@ impl Rule {
         most: usize,
         calendar: &Working,
     ) -> Vec<Day> {
-        let mut days = Vec::new();
-        let mut counted = 0;
+        self.each_day(start, from, to, calendar, &[]).take(most).collect()
+    }
+
+    /// Each day a schedule comes round on from its first, `start`, up to
+    /// and including `to`, none before `from`, and none of `skipped`.
+    pub(crate) fn each_day<'a>(
+        &'a self,
+        start: Day,
+        from: Day,
+        to: Day,
+        calendar: &'a Working,
+        skipped: &'a [Day],
+    ) -> RepeatDays<'a> {
         // With no count to keep, it starts a period before the one the
         // first day asked for is in, rather than going through every one
-        // since it began. With one, every period before has to be counted,
-        // so it goes through them, and as many again after.
+        // since it began. With one, every period before has to be counted.
         // An offset can move a day out of its period, as far as a year.
         let back = if self.offset.is_some() { 2 } else { 1 };
         let before = if from > start { (self.periods_to(start, from) - back).max(0) } else { 0 };
-        let skip = if self.count.is_none() { before } else { 0 };
         // The named day it's on, if it's on one, which isn't on any day if
         // the calendar hasn't got it.
-        let named = match &self.on {
-            Some(name) => match crate::named::find(&calendar.named, name) {
-                Some(named) => Some(named),
-                None => return days,
-            },
-            None => None,
-        };
-        for period in skip..before + MOST_PERIODS {
-            let Some(found) = self.period_days(start, period, calendar, named) else { break };
-            for day in found {
-                if day < start {
-                    continue;
-                }
-                if day > to || self.until.is_some_and(|until| day > until) {
-                    return days;
-                }
-                counted += 1;
-                if day >= from {
-                    days.push(day);
-                }
-                if days.len() >= most || self.count.is_some_and(|count| counted >= count) {
-                    return days;
-                }
-            }
+        let named = self.on.as_ref().map(|name| crate::named::find(&calendar.named, name));
+        RepeatDays {
+            rule: self,
+            start,
+            from,
+            to,
+            calendar,
+            skipped,
+            named: named.flatten(),
+            period: if self.count.is_none() { before } else { 0 },
+            last: self.periods_to(start, to.max(start)).saturating_add(back + 1),
+            found: Vec::new().into_iter(),
+            counted: 0,
+            done: matches!(named, Some(None)),
         }
-        days
     }
 
     /// The first day it comes round on, on or after a day: the first of
@@ -620,9 +687,6 @@ impl<'de> serde::Deserialize<'de> for Rule {
             .ok_or_else(|| serde::de::Error::custom("not a rule this can work out the days of"))
     }
 }
-
-/// Enough to go through a daily rule's years without running for ever.
-const MOST_PERIODS: i64 = 20_000;
 
 const WORKING: [Weekday; 5] =
     [Weekday::Monday, Weekday::Tuesday, Weekday::Wednesday, Weekday::Thursday, Weekday::Friday];

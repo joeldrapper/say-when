@@ -48,6 +48,23 @@ pub struct Repeat {
     pub rule: Rule,
     /// The first day it's on.
     pub starts: Day,
+    /// The days it doesn't come round on after all, in any order, as
+    /// iCalendar's `EXDATE` has them: they still count towards how many
+    /// times it does.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub skipped: Vec<Day>,
+}
+
+impl Repeat {
+    /// One on a schedule, from its first day.
+    pub fn schedule(rule: Rule, starts: Day) -> Repeat {
+        Repeat { kind: RepeatKind::Schedule, rule, starts, skipped: Vec::new() }
+    }
+
+    /// One that comes round so long after it's done, counted from a day.
+    pub fn after_done(rule: Rule, from: Day) -> Repeat {
+        Repeat { kind: RepeatKind::After, rule, starts: from, skipped: Vec::new() }
+    }
 }
 
 const WORKING: [Weekday; 5] =
@@ -614,7 +631,7 @@ impl RepeatParser<'_> {
                 if body.kind == RepeatKind::After {
                     if !tail.stops() {
                         let starts = tail.starts.unwrap_or(today);
-                        add(Repeat { kind: RepeatKind::After, rule: body.rule.clone(), starts });
+                        add(Repeat::after_done(body.rule.clone(), starts));
                     }
                     continue;
                 }
@@ -641,7 +658,7 @@ impl RepeatParser<'_> {
                 if rule.until.is_some_and(|until| until < starts) {
                     continue;
                 }
-                add(Repeat { kind: RepeatKind::Schedule, rule: rule.clone(), starts });
+                add(Repeat::schedule(rule.clone(), starts));
                 // Every other week could be this week's or next week's.
                 if rule.frequency == Frequency::Weekly
                     && rule.interval == 2
@@ -653,7 +670,7 @@ impl RepeatParser<'_> {
                         .and_then(|next| rule.first_day(next, calendar))
                         .filter(|later| rule.until.is_none_or(|until| *later <= until));
                     if let Some(starts) = later {
-                        add(Repeat { kind: RepeatKind::Schedule, rule, starts });
+                        add(Repeat::schedule(rule, starts));
                     }
                 }
             }
@@ -715,7 +732,7 @@ pub(crate) fn suggestions(from: Day, today: Day) -> Vec<Repeat> {
     ];
     schedules
         .into_iter()
-        .map(|rule| Repeat { kind: RepeatKind::Schedule, rule, starts: from })
-        .chain([Repeat { kind: RepeatKind::After, rule: of(Frequency::Weekly), starts: today }])
+        .map(|rule| Repeat::schedule(rule, from))
+        .chain([Repeat::after_done(of(Frequency::Weekly), today)])
         .collect()
 }
