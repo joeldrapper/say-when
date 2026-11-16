@@ -162,8 +162,16 @@ proptest! {
         }
         if let Some(when) = reader.when(&text, today) {
             prop_assert!(when.words.iter().all(|word| word.role != WordRole::Title));
-            prop_assert_eq!(&when.words, &event.words);
-            prop_assert_eq!((when.start_day, when.start_time), (event.start_day, event.start_time));
+            // With no title to be part of, a word that only might be a day,
+            // like "ha" half typed for Halloween, is one, as an event's
+            // title it's left: they read alike when the event has none.
+            if event.words.iter().all(|word| word.role != WordRole::Title) {
+                prop_assert_eq!(&when.words, &event.words);
+                prop_assert_eq!(
+                    (when.start_day, when.start_time),
+                    (event.start_day, event.start_time)
+                );
+            }
         }
     }
 
