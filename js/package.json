@@ -39,6 +39,9 @@
 		"./say-when.wasm": "./dist/say-when.wasm",
 		"./package.json": "./package.json"
 	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"build": "node scripts/build.ts",
 		"wasm": "node scripts/build.ts --wasm",
@@ -54,9 +57,6 @@
 		"oxfmt": "^0.78.0",
 		"oxlint": "^1.93.0",
 		"typescript": "^7.0.2"
-	},
-	"publishConfig": {
-		"access": "public"
 	},
 	"engines": {
 		"node": ">=20.16"
