@@ -1,6 +1,6 @@
 [package]
 name = "say-when"
-version = "0.1.2"
+version = "0.1.3"
 description = "Reads days, ranges of days, times and how things repeat, written in plain English"
 edition = "2024"
 rust-version = "1.90"
