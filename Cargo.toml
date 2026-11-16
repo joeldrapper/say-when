@@ -35,6 +35,21 @@ required-features = ["serde"]
 name = "bench"
 required-features = ["serde"]
 
+# The WebAssembly module the npm package holds (see js/), which is never
+# published as a crate.
+[workspace]
+members = ["js/wasm"]
+
+# Small before fast, for the WebAssembly module: it answers in a
+# microsecond or so either way, and every byte of it is fetched.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
