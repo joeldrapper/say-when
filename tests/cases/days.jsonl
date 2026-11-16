@@ -16298,3 +16298,5 @@
 {"out":{"days":[{"about":null,"day":"2026-12-28","how":"the Monday after Fri 25 Dec, Christmas Day"}],"span":null},"text":"the first monday after christmas","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2026-12-30","how":"the weekday before Thu 31 Dec, New Year’s Eve"}],"span":null},"text":"the last weekday before new year's eve","today":"2026-11-16"}
 {"out":{"days":[{"about":null,"day":"2027-01-04","how":"the working day after Fri 1 Jan 2027, New Year’s Day"}],"span":null},"text":"the first working day after new year's day","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-24","how":"the working day before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final working day before christmas","today":"2026-11-16"}
+{"out":{"days":[{"about":null,"day":"2026-12-18","how":"the Friday before Fri 25 Dec, Christmas Day"}],"span":null},"text":"the final friday before christmas","today":"2026-11-16"}

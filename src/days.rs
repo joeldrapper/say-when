@@ -501,11 +501,12 @@ impl<'a> Parser<'a> {
         }
         let mut found = Vec::new();
 
-        // "the last working day before christmas", "the first monday after
-        // easter": the nearest one, as with neither word.
+        // "the last working day before christmas", "the final friday before
+        // it", "the first monday after easter": the nearest one, as with
+        // neither word.
         let nearest = match self.tokens.get(at) {
             Some(Token::Ordinal(1)) => Some(false),
-            _ if self.exactly(at, "last") => Some(true),
+            _ if self.exactly(at, "last") || self.exactly(at, "final") => Some(true),
             _ => None,
         };
         if let Some(before) = nearest {
