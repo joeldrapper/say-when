@@ -17,6 +17,7 @@ use say_when::{
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// What a request was asked with: its fields, read as what each should be.
 ///
@@ -53,9 +54,8 @@ impl<'a> Asked<'a> {
         u32::try_from(number).map_err(|_| format!("{name} is too large"))
     }
 
-    fn reader(self) -> Result<usize> {
-        let number = self.field("reader")?.as_u64().ok_or("reader isn't a number")?;
-        usize::try_from(number).map_err(|_| "no such reader".to_string())
+    fn reader(self) -> Result<u64> {
+        self.field("reader")?.as_u64().ok_or_else(|| "reader isn't a number".to_string())
     }
 
     fn day(self, name: &str) -> Result<Day> {
@@ -211,31 +211,31 @@ fn answer(value: impl Serialize) -> Result<String> {
     serde_json::to_string(&value).map_err(|error| error.to_string())
 }
 
-/// The readers made, by their numbers, each with where it reads.
+/// The readers made, by their numbers, each with where it reads. A number
+/// is never given twice, so one kept after its reader was let go of can't
+/// come to mean another.
 #[derive(Default)]
 pub struct Readers {
-    made: Vec<Option<(Reader, Locale)>>,
+    made: BTreeMap<u64, (Reader, Locale)>,
+    next: u64,
 }
 
 impl Readers {
     fn get(&self, asked: Asked) -> Result<&(Reader, Locale)> {
         let number = asked.reader()?;
-        self.made.get(number).and_then(Option::as_ref).ok_or_else(|| format!("no reader {number}"))
+        self.made.get(&number).ok_or_else(|| format!("no reader {number}"))
     }
 
     fn reader(&self, asked: Asked) -> Result<&Reader> {
         Ok(&self.get(asked)?.0)
     }
 
-    /// Keeps a reader in the first place free, so their numbers stay
-    /// small, and says which.
-    fn keep(&mut self, reader: (Reader, Locale)) -> usize {
-        let free = self.made.iter().position(Option::is_none).unwrap_or(self.made.len());
-        if free == self.made.len() {
-            self.made.push(None);
-        }
-        self.made[free] = Some(reader);
-        free
+    /// Keeps a reader, and says its number.
+    fn keep(&mut self, reader: (Reader, Locale)) -> u64 {
+        let number = self.next;
+        self.next += 1;
+        self.made.insert(number, reader);
+        number
     }
 
     /// Answers one request: what it's called, and what it's asked with.
@@ -253,9 +253,7 @@ impl Readers {
                 answer(self.keep(about))
             }
             "drop" => {
-                if let Some(made) = self.made.get_mut(asked.reader()?) {
-                    *made = None;
-                }
+                self.made.remove(&asked.reader()?);
                 answer(())
             }
             "days" => answer(self.reader(asked)?.days(text()?, today()?)),
@@ -421,6 +419,8 @@ mod tests {
         );
         assert_eq!(readers.call(r#"{"clock":{"text":"half three"}}"#), r#"{"ok":"15:30"}"#);
         assert_eq!(readers.call(r#"{"drop":{"reader":0}}"#), r#"{"ok":null}"#);
+        // A number isn't given again once its reader's let go of.
+        assert_eq!(readers.call(r#"{"reader":{}}"#), r#"{"ok":1}"#);
         let gone = readers.call(r#"{"days":{"reader":0,"text":"x","today":"2026-10-20"}}"#);
         assert!(gone.contains("no reader 0"), "{gone}");
         assert!(readers.call("nonsense").starts_with(r#"{"error":"#));

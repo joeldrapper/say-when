@@ -16,7 +16,8 @@ type Exports = {
 /** Where the module can come from, for {@link init}. */
 export type ModuleSource =
 	| WebAssembly.Module
-	| BufferSource
+	| ArrayBuffer
+	| ArrayBufferView<ArrayBuffer>
 	| Response
 	| PromiseLike<Response>
 	| URL
@@ -32,19 +33,25 @@ let loading: Promise<void> | null = null;
 // the bytes in the package itself (see index.ts), compiled the first time
 // they're needed, and from `say-when/slim`, the file beside it (see
 // slim.ts), which init() must load first.
-let bytes: (() => BufferSource) | null = null;
+let bytes: (() => ArrayBufferView<ArrayBuffer>) | null = null;
 let fallback: (() => ModuleSource) | null = null;
 
 /**
  * Where the module comes from when init() isn't told, for the entries. An
  * app that imports both has the bytes of the one with them.
  */
-export function from(where: { bytes?: () => BufferSource; source: () => ModuleSource }): void {
+export function from(where: {
+	bytes?: () => ArrayBufferView<ArrayBuffer>;
+	source: () => ModuleSource;
+}): void {
 	bytes ??= where.bytes ?? null;
 	if (where.bytes || !fallback) fallback = where.source;
 }
 
+// Keeps the first module made, and only that: the readers made are in it,
+// by their numbers, so one made after would have none of them.
 function hold(instance: WebAssembly.Instance): void {
+	if (exports) return;
 	const held = instance.exports as Partial<Exports>;
 	if (
 		!(held.memory instanceof WebAssembly.Memory) ||
@@ -61,6 +68,14 @@ function isResponse(source: unknown): source is Response {
 	return typeof Response !== 'undefined' && source instanceof Response;
 }
 
+// What an address is relative to: the page, or where Node was started.
+function base(): string | undefined {
+	if (typeof location !== 'undefined') return location.href;
+	const process = (globalThis as { process?: { cwd?(): string } }).process;
+	const cwd = process?.cwd?.();
+	return cwd === undefined ? undefined : `file://${cwd.endsWith('/') ? cwd : `${cwd}/`}`;
+}
+
 // A file's bytes, where there's a file system and the address is of a file.
 async function readFile(url: URL): Promise<Uint8Array> {
 	const process = (globalThis as { process?: { getBuiltinModule?(name: string): unknown } })
@@ -75,7 +90,7 @@ async function readFile(url: URL): Promise<Uint8Array> {
 async function instantiate(source: ModuleSource): Promise<WebAssembly.Instance> {
 	if (source instanceof WebAssembly.Module) return WebAssembly.instantiate(source, {});
 	if (typeof source === 'string' || source instanceof URL) {
-		const url = new URL(source, typeof location === 'undefined' ? undefined : location.href);
+		const url = new URL(source, base());
 		if (url.protocol === 'file:') return instantiate(await readFile(url));
 		return instantiate(fetch(url));
 	}
@@ -117,6 +132,7 @@ export function init(source?: ModuleSource): Promise<void> {
 		const said = source ?? fallback?.();
 		if (said === undefined)
 			throw new Error('say-when: init() needs to be told where the module is');
+		// Kept unless the module was made while this one was coming.
 		hold(await instantiate(said));
 	})().catch((error: unknown) => {
 		// Asked again, it's tried again, as when the network was down.
@@ -140,15 +156,26 @@ export class SayWhenError extends Error {
 	override name = 'SayWhenError';
 }
 
+// What stopped the module, if it did. It never should: but after a trap,
+// what it held may be half changed, so nothing more is asked of it.
+let stopped: unknown = null;
+
 /** Asks the module something, and gives back what it answered. */
 export function ask(name: string, asked: object): unknown {
+	if (stopped) throw new SayWhenError('say-when: the module stopped earlier', { cause: stopped });
 	const module = loaded();
 	const request = encoder.encode(JSON.stringify({ [name]: asked }));
-	const at = module.request(request.length);
-	// Its memory is looked at afresh each time, as it moves when it grows.
-	new Uint8Array(module.memory.buffer, at, request.length).set(request);
-	const length = module.call();
-	const said = decoder.decode(new Uint8Array(module.memory.buffer, module.answer(), length));
+	let said: string;
+	try {
+		const at = module.request(request.length);
+		// Its memory is looked at afresh each time, as it moves when it grows.
+		new Uint8Array(module.memory.buffer, at, request.length).set(request);
+		const length = module.call();
+		said = decoder.decode(new Uint8Array(module.memory.buffer, module.answer(), length));
+	} catch (error) {
+		stopped = error;
+		throw new SayWhenError(`say-when: the module stopped, asked ${name}`, { cause: error });
+	}
 	const answer = JSON.parse(said) as { ok: unknown } | { error: string };
 	if ('error' in answer) throw new SayWhenError(`say-when: ${answer.error}`);
 	return answer.ok;

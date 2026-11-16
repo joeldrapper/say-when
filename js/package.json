@@ -23,7 +23,10 @@
 		"!dist/module.d.ts.map"
 	],
 	"type": "module",
-	"sideEffects": false,
+	"sideEffects": [
+		"./dist/index.js",
+		"./dist/slim.js"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -39,7 +42,7 @@
 	"scripts": {
 		"build": "node scripts/build.ts",
 		"wasm": "node scripts/build.ts --wasm",
-		"test": "node scripts/build.ts --wasm && node --test 'test/*.test.ts'",
+		"test": "node scripts/build.ts && node --test 'test/*.test.ts'",
 		"check": "tsc --noEmit",
 		"lint": "oxfmt --check && oxlint --deny-warnings",
 		"format": "oxfmt",
@@ -47,6 +50,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.6",
+		"esbuild": "^0.28.2",
 		"oxfmt": "^0.78.0",
 		"oxlint": "^1.93.0",
 		"typescript": "^7.0.2"

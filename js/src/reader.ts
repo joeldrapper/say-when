@@ -305,9 +305,13 @@ export interface WhenReading {
 
 const pad = (number: number, width: number) => String(number).padStart(width, '0');
 
+const isDate = (value: unknown): value is Date =>
+	// A Date from anywhere, another frame's among them.
+	Object.prototype.toString.call(value) === '[object Date]';
+
 function dayOf(day: DayLike, what = 'day'): string {
 	if (typeof day === 'string') return day;
-	if (day instanceof Date) {
+	if (isDate(day)) {
 		if (Number.isNaN(day.getTime())) throw new RangeError(`say-when: ${what} is an invalid Date`);
 		return `${pad(day.getFullYear(), 4)}-${pad(day.getMonth() + 1, 2)}-${pad(day.getDate(), 2)}`;
 	}
