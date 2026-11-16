@@ -10,6 +10,8 @@ documentation = "https://docs.rs/say-when"
 readme = "README.md"
 keywords = ["date", "parser", "natural-language", "recurrence", "rrule"]
 categories = ["date-and-time", "parser-implementations"]
+# The cases go with it, so anything that reaches it another way can run them.
+include = ["/src", "/tests", "/examples", "/README.md", "/LICENSE"]
 
 [features]
 # Lets what's read be written out, and options read in, with serde.
