@@ -1,5 +1,5 @@
 {
-	"name": "say-when",
+	"name": "@milieu/say-when",
 	"version": "0.1.0",
 	"description": "Reads days, ranges of days, times and how things repeat, written in plain English",
 	"keywords": [
@@ -38,6 +38,9 @@
 		},
 		"./say-when.wasm": "./dist/say-when.wasm",
 		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"build": "node scripts/build.ts",

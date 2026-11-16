@@ -29,9 +29,9 @@ const decoder = new TextDecoder();
 let exports: Exports | null = null;
 let loading: Promise<void> | null = null;
 
-// Where the module comes from when it isn't given one: from `say-when`,
+// Where the module comes from when it isn't given one: from `@milieu/say-when`,
 // the bytes in the package itself (see index.ts), compiled the first time
-// they're needed, and from `say-when/slim`, the file beside it (see
+// they're needed, and from `@milieu/say-when/slim`, the file beside it (see
 // slim.ts), which init() must load first.
 let bytes: (() => ArrayBufferView<ArrayBuffer>) | null = null;
 let fallback: (() => ModuleSource) | null = null;
@@ -114,11 +114,11 @@ async function instantiate(source: ModuleSource): Promise<WebAssembly.Instance> 
 /**
  * Compiles the library's WebAssembly module, once, before anything's read.
  *
- * From `say-when`, it needn't be called at all: the module's in the
+ * From `@milieu/say-when`, it needn't be called at all: the module's in the
  * package, and it's compiled the first time it's needed. Calling it
  * first compiles it off the main thread, where a browser can.
  *
- * From `say-when/slim`, it must be called, and resolve, before anything's
+ * From `@milieu/say-when/slim`, it must be called, and resolve, before anything's
  * read. With no source, it loads `say-when.wasm` from beside the package's
  * code, which bundlers that follow `new URL(…, import.meta.url)` copy
  * over. Or give it the module, its bytes, a response, or where to fetch it
@@ -145,7 +145,9 @@ export function init(source?: ModuleSource): Promise<void> {
 function loaded(): Exports {
 	if (exports) return exports;
 	if (!bytes) {
-		throw new Error('say-when: call and await init() before reading anything with say-when/slim');
+		throw new Error(
+			'say-when: call and await init() before reading anything with @milieu/say-when/slim'
+		);
 	}
 	hold(new WebAssembly.Instance(new WebAssembly.Module(bytes()), {}));
 	return exports as unknown as Exports;

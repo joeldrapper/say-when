@@ -11,11 +11,11 @@ compiled to WebAssembly, with a typed TypeScript API. It reads exactly as
 the crate does: the crate's 27,000 cases are run through this package too.
 
 ```sh
-npm install say-when
+npm install @milieu/say-when
 ```
 
 ```ts
-import { Reader } from 'say-when';
+import { Reader } from '@milieu/say-when';
 
 const reader = new Reader({ locale: 'uk' });
 
@@ -92,7 +92,7 @@ holidays. You say:
   times are in.
 
 ```ts
-import { easter, Reader } from 'say-when';
+import { easter, Reader } from '@milieu/say-when';
 
 const reader = new Reader({
 	locale: 'us',
@@ -123,12 +123,12 @@ code runs.
 
 ## Loading the WebAssembly
 
-From `say-when`, the module is in the package's code, and compiled the
+From `@milieu/say-when`, the module is in the package's code, and compiled the
 first time it's needed, so there's nothing to set up and nothing to
 await. To compile it ahead, off the main thread where a browser can, call
 `await init()` first.
 
-From `say-when/slim`, it isn't, which saves about a quarter of what's
+From `@milieu/say-when/slim`, it isn't, which saves about a quarter of what's
 downloaded, and lets a browser compile it as it arrives and keep it
 cached as its own file. Call `await init()` before reading anything: it
 loads `say-when.wasm` from beside the package's code, which bundlers that
@@ -137,8 +137,8 @@ over. Or tell it where the module is, as a URL, a `Response`, its bytes or
 a compiled `WebAssembly.Module`:
 
 ```ts
-import wasm from 'say-when/say-when.wasm?url';
-import { init, Reader } from 'say-when/slim';
+import wasm from '@milieu/say-when/say-when.wasm?url';
+import { init, Reader } from '@milieu/say-when/slim';
 
 await init(wasm);
 ```
