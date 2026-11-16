@@ -1,0 +1,43 @@
+{"out":{"all_day":["2026-11-13",null],"from":["2026-11-13","14:00"],"offset":"-P3D","said":"3 days before"},"text":"3 days before"}
+{"out":{"all_day":["2026-11-15",null],"from":["2026-11-15","14:00"],"offset":"-P1D","said":"the day before"},"text":"a day before"}
+{"out":{"all_day":["2026-11-15",null],"from":["2026-11-15","14:00"],"offset":"-P1D","said":"the day before"},"text":"the day before"}
+{"out":{"all_day":["2026-11-15","09:00"],"from":["2026-11-15","09:00"],"offset":"-P1D@09:00","said":"the day before at 9am"},"text":"the day before at 9am"}
+{"out":{"all_day":["2026-11-15","09:00"],"from":["2026-11-15","09:00"],"offset":"-P1D@09:00","said":"the day before at 9am"},"text":"9am the day before"}
+{"out":{"all_day":["2026-11-15","09:00"],"from":["2026-11-15","09:00"],"offset":"-P1D@09:00","said":"the day before at 9am"},"text":"the day before at 9"}
+{"out":{"all_day":["2026-11-16",null],"from":["2026-11-16","14:00"],"offset":"P0D","said":"on the day"},"text":"on the day"}
+{"out":{"all_day":["2026-11-16","09:00"],"from":["2026-11-16","09:00"],"offset":"P0D@09:00","said":"on the day at 9am"},"text":"on the day at 9am"}
+{"out":{"all_day":["2026-11-16",null],"from":["2026-11-16","14:00"],"offset":"P0D","said":"on the day"},"text":"the day of"}
+{"out":{"all_day":["2026-11-16","08:00"],"from":["2026-11-16","08:00"],"offset":"P0D@08:00","said":"on the day at 8am"},"text":"at 8am"}
+{"out":{"all_day":null,"from":["2026-11-16","13:00"],"offset":"-PT1H","said":"an hour before"},"text":"an hour before"}
+{"out":{"all_day":null,"from":["2026-11-16","13:00"],"offset":"-PT1H","said":"an hour before"},"text":"1 hour before"}
+{"out":{"all_day":null,"from":["2026-11-16","12:00"],"offset":"-PT2H","said":"2 hours before"},"text":"2 hours before"}
+{"out":{"all_day":null,"from":["2026-11-16","13:30"],"offset":"-PT30M","said":"30 minutes before"},"text":"half an hour before"}
+{"out":{"all_day":null,"from":["2026-11-16","13:30"],"offset":"-PT30M","said":"30 minutes before"},"text":"30 minutes before"}
+{"out":{"all_day":null,"from":["2026-11-16","13:45"],"offset":"-PT15M","said":"15 minutes before"},"text":"15 mins before"}
+{"out":{"all_day":null,"from":["2026-11-16","13:55"],"offset":"-PT5M","said":"5 minutes before"},"text":"5 min before"}
+{"out":{"all_day":null,"from":["2026-11-16","14:10"],"offset":"PT10M","said":"10 minutes after"},"text":"10 minutes after"}
+{"out":{"all_day":null,"from":["2026-11-16","15:00"],"offset":"PT1H","said":"an hour after"},"text":"an hour after"}
+{"out":{"all_day":["2026-11-09",null],"from":["2026-11-09","14:00"],"offset":"-P1W","said":"a week before"},"text":"a week before"}
+{"out":{"all_day":["2026-11-02",null],"from":["2026-11-02","14:00"],"offset":"-P2W","said":"2 weeks before"},"text":"2 weeks before"}
+{"out":{"all_day":["2026-11-02",null],"from":["2026-11-02","14:00"],"offset":"-P2W","said":"2 weeks before"},"text":"a fortnight before"}
+{"out":{"all_day":["2026-10-16",null],"from":["2026-10-16","14:00"],"offset":"-P1M","said":"a month before"},"text":"a month before"}
+{"out":{"all_day":["2025-11-16",null],"from":["2025-11-16","14:00"],"offset":"-P1Y","said":"a year before"},"text":"a year before"}
+{"out":{"all_day":["2026-11-12",null],"from":["2026-11-12","14:00"],"offset":"-2WORKDAY","said":"2 working days before"},"text":"2 working days before"}
+{"out":{"all_day":["2026-11-19",null],"from":["2026-11-19","14:00"],"offset":"+3WEEKDAY","said":"3 weekdays after"},"text":"3 weekdays after"}
+{"out":{"all_day":["2026-11-13",null],"from":["2026-11-13","14:00"],"offset":"-FR","said":"the Friday before"},"text":"the friday before"}
+{"out":{"all_day":["2026-11-13","17:00"],"from":["2026-11-13","17:00"],"offset":"-FR@17:00","said":"the Friday before at 5pm"},"text":"the friday before at 5pm"}
+{"out":{"all_day":["2026-11-23",null],"from":["2026-11-23","14:00"],"offset":"+MO","said":"the Monday after"},"text":"the monday after"}
+{"out":{"all_day":["2026-11-14",null],"from":["2026-11-14","14:00"],"offset":"-WEEKEND","said":"the weekend before"},"text":"the weekend before"}
+{"out":{"all_day":["2026-11-21",null],"from":["2026-11-21","14:00"],"offset":"+WEEKEND","said":"the weekend after"},"text":"the weekend after"}
+{"out":{"all_day":["2026-11-09",null],"from":["2026-11-09","14:00"],"offset":"-P1W","said":"a week before"},"text":"the week before"}
+{"out":{"all_day":["2026-11-19",null],"from":["2026-11-19","14:00"],"offset":"P3D","said":"3 days after"},"text":"3 days after"}
+{"out":null,"text":"3 days"}
+{"out":null,"text":"before"}
+{"out":null,"text":"tomorrow"}
+{"out":null,"text":"the day before tomorrow"}
+{"out":null,"text":"next friday"}
+{"out":null,"text":"an hour before at 9am"}
+{"out":null,"text":"2 days earlier"}
+{"out":null,"text":"the night before"}
+{"out":{"all_day":["2026-11-15","12:00"],"from":["2026-11-15","12:00"],"offset":"-P1D@12:00","said":"the day before at noon"},"text":"a day before at noon"}
+{"out":null,"text":"the evening before"}
